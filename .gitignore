@@ -1,0 +1,5 @@
+/.idea/*
+/dataset/bdd100k/*
+/log/*
+/config/weight/*
+
