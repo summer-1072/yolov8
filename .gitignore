@@ -2,4 +2,6 @@
 /dataset/bdd100k/*
 /log/*
 /config/weight/*
-
+/model/__pycache__/
+/utils/__pycache__/
+/run/__pycache__/

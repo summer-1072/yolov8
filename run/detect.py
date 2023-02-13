@@ -40,7 +40,7 @@ def detect(args):
     half = args.half & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_file, args.weight_file, False)
+    model = load_model(args.model_file, args.weight_file, False, True)
     model.to(device)
     if half:
         model.half()
@@ -104,8 +104,8 @@ def detect(args):
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_dir', type=str, default='../dataset/coco/images')
 parser.add_argument('--cls_file', type=str, default='../dataset/coco/cls.yaml')
-parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
-parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')
+parser.add_argument('--model_file', type=str, default='../config/model/yolov8l.yaml')
+parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8l.pth')
 parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--log_dir', type=str, default='../log/detect')
 parser.add_argument('--half', type=bool, default=False)

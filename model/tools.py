@@ -31,26 +31,45 @@ def transform_weight(model, pretrain):
     model.load_state_dict(model_dict)
 
 
-def load_weight(model, weight, training):
-    if not training:
-        # pred -> fuse conv and bn
-        for m in model.modules():
-            if isinstance(m, Conv) and hasattr(m, 'bn'):
-                conv = m.conv
-                conv.bias = torch.nn.Parameter(torch.zeros(conv.weight.size(0), device=conv.weight.device))
-                delattr(m, 'bn')
-                m.forward = m.forward_fuse
+def load_weight(model, weight, training, fused):
+    weight_dict = weight['model']
 
-    model.load_state_dict(weight['model'])
+    if fused:
+        if training:
+            model_dict = model.state_dict()
+
+            for k, v in weight_dict.items():
+                # conv: weight
+                if k in model_dict:
+                    model_dict[k] = v
+                # bn: bias
+                else:
+                    model_dict[k.replace('conv.', 'bn.')] = v
+
+            model.load_state_dict(model_dict)
+
+        else:
+            # pred -> fuse conv and bn
+            for m in model.modules():
+                if isinstance(m, Conv) and hasattr(m, 'bn'):
+                    conv = m.conv
+                    conv.bias = torch.nn.Parameter(torch.zeros(conv.weight.size(0), device=conv.weight.device))
+                    delattr(m, 'bn')
+                    m.forward = m.forward_fuse
+
+            model.load_state_dict(weight_dict)
+
+    else:
+        model.load_state_dict(weight_dict)
 
 
-def load_model(model_file, weight_file, training):
+def load_model(model_file, weight_file, training, fused):
     args = yaml.safe_load(open(model_file, encoding="utf-8"))
     model = YOLO(args['param'], args['reg_max'], args['chs'], args['strides'], args['num_cls'], training)
 
     if weight_file:
         weight = torch.load(weight_file)
-        load_weight(model, weight, training)
+        load_weight(model, weight, training, fused)
 
     return model
 
