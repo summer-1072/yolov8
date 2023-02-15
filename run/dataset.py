@@ -17,7 +17,7 @@ def build_labels(input_file, output_file, image_dir, cls):
         for index in tqdm(range(len(lines)), desc=f'reading {input_file}, {len(lines)} records'):
             name = lines[index]['name']
             labels = lines[index]['labels']
-            W, H = imagesize.get(image_dir + '/' + name)
+            img_w, img_h = imagesize.get(image_dir + '/' + name)
 
             targets = []
             for label in labels:
@@ -26,13 +26,13 @@ def build_labels(input_file, output_file, image_dir, cls):
                     c = cls.index(category)
                     box2d = label['box2d']
                     x1, y1, x2, y2 = box2d['x1'], box2d['y1'], box2d['x2'], box2d['y2']
-                    x = round((x1 + x2) / (2 * W), 4)
-                    y = round((y1 + y2) / (2 * H), 4)
-                    w = round(abs(x1 - x2) / W, 4)
-                    h = round(abs(y1 - y2) / H, 4)
+                    x = round((x1 + x2) / (2 * img_w), 4)
+                    y = round((y1 + y2) / (2 * img_h), 4)
+                    w = round(abs(x1 - x2) / img_w, 4)
+                    h = round(abs(y1 - y2) / img_h, 4)
                     targets.append(','.join([str(i) for i in [c, x, y, w, h]]))
 
-            records.append(name + '  ' + str(W) + ',' + str(H) + '  ' + '  '.join(targets))
+            records.append(name + '  ' + '  '.join(targets))
 
     with open(output_file, 'w', encoding='utf-8') as f:
         for record in records:
@@ -40,33 +40,31 @@ def build_labels(input_file, output_file, image_dir, cls):
 
 
 def read_labels(file):
-    imgs, labels, indices, shapes = [], [], [], []
+    indices, imgs, labels = [], [], []
     with open(file, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
         print('reading {}, {} coco'.format(file, len(lines)))
         for index in range(len(lines)):
             indices.append(index)
-
             line = lines[index].replace('\n', '').split('  ')
             imgs.append(line[0])
-            shapes.append([int(x) for x in line[1].split(',')])
-            labels.append(np.array([[float(i) for i in obj.split(',')] for obj in line[2:]]))
+            labels.append(np.array([[float(i) for i in obj.split(',')] for obj in line[1:]]))
 
-    return np.array(imgs), np.array(labels), np.array(indices), np.array(shapes)
+    return indices, imgs, labels
 
 
 def load_image(file, size):
     img = cv2.imread(file)
-    H, W = img.shape[:2]
-    ratio = size / max(H, W)
+    h, w = img.shape[:2]
+    ratio = size / max(h, w)
     if ratio != 1:
-        img = cv2.resize(img, (math.ceil(W * ratio), math.ceil(H * ratio)), cv2.INTER_LINEAR)
+        img = cv2.resize(img, (math.ceil(w * ratio), math.ceil(h * ratio)), cv2.INTER_LINEAR)
 
     return img, img.shape[:2]
 
 
-def mosaic(img_dir, imgs, labels, indices, index, new_shape):
+def mosaic(index, indices, img_dir, imgs, labels, new_shape):
     c_x = int(random.uniform(new_shape[1] // 2, 2 * new_shape[1] - new_shape[1] // 2))
     c_y = int(random.uniform(new_shape[0] // 2, 2 * new_shape[0] - new_shape[0] // 2))
 
@@ -75,10 +73,8 @@ def mosaic(img_dir, imgs, labels, indices, index, new_shape):
 
     img4 = np.full((new_shape[0] * 2, new_shape[1] * 2, 3), 114, dtype=np.uint8)
     img4_labels = []
-
     for (i, index) in enumerate(t_indices):
-        img_name = imgs[index]
-        img_file = img_dir + '/' + img_name
+        img_file = img_dir + '/' + imgs[index]
 
         img, (h, w) = load_image(img_file, max(new_shape))
 
@@ -100,7 +96,6 @@ def mosaic(img_dir, imgs, labels, indices, index, new_shape):
         # labels
         offset_x, offset_y = x1a - x1b, y1a - y1b
         img_labels = labels[index].copy()
-
         if len(img_labels):
             img_labels[:, 1:5] = xywh_norm2xyxy(img_labels[:, 1:5], w, h, offset_x, offset_y)
             img4_labels.append(img_labels)
@@ -109,20 +104,19 @@ def mosaic(img_dir, imgs, labels, indices, index, new_shape):
 
     img4_labels[:, [1, 3]] = np.clip(img4_labels[:, [1, 3]], 0, 2 * new_shape[1])
     img4_labels[:, [2, 4]] = np.clip(img4_labels[:, [2, 4]], 0, 2 * new_shape[0])
+    img4_labels = img4_labels / 2
 
     img4 = cv2.resize(img4, (new_shape[1], new_shape[0]), cv2.INTER_LINEAR)
-
-    img4_labels = img4_labels / 2
 
     return img4, img4_labels
 
 
 def affine_transform(img, labels, scale, translate):
-    H, W = img.shape[:2]
+    h, w = img.shape[:2]
     # center
     C = np.eye(3)
-    C[0, 2] = -W / 2
-    C[1, 2] = -H / 2
+    C[0, 2] = -w / 2
+    C[1, 2] = -h / 2
 
     # scale
     R = np.eye(3)
@@ -131,12 +125,12 @@ def affine_transform(img, labels, scale, translate):
 
     # translate
     T = np.eye(3)
-    T[0, 2] = random.uniform(0.5 - translate, 0.5 + translate) * W
-    T[1, 2] = random.uniform(0.5 - translate, 0.5 + translate) * H
+    T[0, 2] = random.uniform(0.5 - translate, 0.5 + translate) * w
+    T[1, 2] = random.uniform(0.5 - translate, 0.5 + translate) * h
 
     M = T @ R @ C
 
-    img = cv2.warpAffine(img, M[:2], dsize=(W, H), flags=cv2.INTER_LINEAR, borderValue=(114, 114, 114))
+    img = cv2.warpAffine(img, M[:2], dsize=(w, h), flags=cv2.INTER_LINEAR, borderValue=(114, 114, 114))
 
     num = len(labels)
     if num:
@@ -148,8 +142,8 @@ def affine_transform(img, labels, scale, translate):
         x = points[:, [0, 2, 4, 6]]
         y = points[:, [1, 3, 5, 7]]
         box = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, num).T
-        box[:, [0, 2]] = box[:, [0, 2]].clip(0, W)
-        box[:, [1, 3]] = box[:, [1, 3]].clip(0, H)
+        box[:, [0, 2]] = box[:, [0, 2]].clip(0, w)
+        box[:, [1, 3]] = box[:, [1, 3]].clip(0, h)
 
         labels[:, 1:5] = box
 
@@ -203,20 +197,19 @@ class LoadDataset(Dataset):
     def __init__(self, img_dir, label_file, hyp):
         self.img_dir = img_dir
         self.hyp = hyp
-        self.imgs, self.labels, self.indices, self.shapes = read_labels(label_file)
+        self.indices, self.imgs, self.labels = read_labels(label_file)
 
     def __getitem__(self, index):
         if self.hyp['augment'] and self.hyp['mosaic']:
-            img, labels = mosaic(self.img_dir, self.imgs, self.labels, self.indices, index, self.hyp['shape'])
+            img, labels = mosaic(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
 
         else:
             img_file = self.img_dir + '/' + self.imgs[index]
             img, (h, w) = load_image(img_file, max(self.hyp['shape']))
             img, ratio, (pad_w, pad_h) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
-
-        labels = self.labels[index].copy()
-        if len(labels):
-            labels[:, 1:5] = xywh_norm2xyxy(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
+            labels = self.labels[index].copy()
+            if len(labels):
+                labels[:, 1:5] = xywh_norm2xyxy(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
 
         if self.hyp['augment'] and self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])
@@ -240,7 +233,7 @@ class LoadDataset(Dataset):
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img)
 
-        labels = torch.from_numpy(np.insert(labels, obj=0, values=0, axis=1)) if num else torch.zeros((num, 6))
+        labels = torch.from_numpy(np.insert(labels, 0, 0, 1)) if num else torch.zeros((num, 6))
 
         return img, labels
 

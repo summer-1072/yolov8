@@ -1,10 +1,10 @@
 import os
-import time
 import yaml
 import torch
 import argparse
 from tqdm import tqdm
 from tools import load_model
+from torch.utils.data import DataLoader
 from plot import plot_images, plot_labels
 from dataset import build_labels, LoadDataset
 
@@ -21,9 +21,9 @@ def train(args):
 
     # load dataset
     dataset = LoadDataset(args.train_img_dir, args.train_label_file, hyp)
-    dataloader = torch.utils.data.DataLoader(dataset=dataset,
-                                             batch_size=args.batch_size, num_workers=args.njobs,
-                                             shuffle=True, collate_fn=LoadDataset.collate_fn)
+    dataloader = DataLoader(dataset=dataset,
+                            batch_size=args.batch_size, num_workers=args.njobs,
+                            shuffle=True, collate_fn=LoadDataset.collate_fn)
 
     # build log_dir
     if args.pretrain_dir == '':
@@ -32,24 +32,26 @@ def train(args):
         else:
             ord = max([int(x.replace('train', '')) for x in os.listdir(args.log_dir)]) + 1
             log_dir = os.path.join(args.log_dir, 'train' + str(ord))
+
         os.makedirs(log_dir)
+        os.makedirs(os.path.join(log_dir, 'imgs'))
         weight_file = args.weight_file
 
     else:
         log_dir = args.pretrain_dir
-        weight_file = log_dir + '/weight.pth'
+        weight_file = os.path.join(log_dir, 'weight.pth')
 
     # plot label
-    plot_labels(dataset.labels, cls, log_dir + '/label.jpg')
+    plot_labels(dataset.labels, cls, os.path.join(log_dir, 'label.jpg'))
 
     # load model
-    model = load_model(args.model_file, weight_file, True)
+    model = load_model(args.model_file, weight_file, args.training, args.fused)
     model.to(device)
     model.train()
 
     pbar = tqdm(dataloader, ncols=100, desc="Epoch {}".format(1))
     for index, (imgs, labels) in enumerate(pbar):
-        plot_images(imgs, labels, log_dir + '/imgs/' + str(index) + '.jpg')
+        plot_images(imgs, labels, os.path.join(log_dir + '/imgs', str(index) + '.jpg'))
 
 
 parser = argparse.ArgumentParser()
@@ -57,14 +59,18 @@ parser.add_argument('--train_img_dir', type=str, default='../dataset/bdd100k/ima
 parser.add_argument('--train_label_file', type=str, default='../dataset/bdd100k/labels/train.txt')
 parser.add_argument('--val_img_dir', type=str, default='../dataset/bdd100k/images/val')
 parser.add_argument('--val_label_file', type=str, default='../dataset/bdd100k/labels/val.txt')
+
 parser.add_argument('--cls_file', type=str, default='../dataset/bdd100k/cls.yaml')
 parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
 parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')
+parser.add_argument('--training', type=bool, default=True)
+parser.add_argument('--fused', type=bool, default=True)
+
 parser.add_argument('--pretrain_dir', type=str, default='')
 parser.add_argument('--log_dir', type=str, default='../log/train')
-parser.add_argument('--batch_size', type=str, default=4)
-parser.add_argument('--njobs', type=str, default=2)
+parser.add_argument('--batch_size', type=str, default=2)
+parser.add_argument('--njobs', type=str, default=1)
 args = parser.parse_args()
 
 if __name__ == "__main__":

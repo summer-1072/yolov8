@@ -111,15 +111,15 @@ def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-7):
     return iou.squeeze(2) if foreach else iou
 
 
-def letterbox(img, shape1, stride):
+def letterbox(img, new_shape, stride):
     # scale image
-    shape0 = img.shape[:2]
-    ratio = min(min(shape1[0] / shape0[0], shape1[1] / shape0[1]), 1)
+    shape = img.shape[:2]
+    ratio = min(min(new_shape[0] / shape[0], new_shape[1] / shape[1]), 1)
 
-    unpad_shape = int(round(shape0[1] * ratio)), int(round(shape0[0] * ratio))
-    dW, dH = ((shape1[1] - unpad_shape[0]) % stride) / 2, ((shape1[0] - unpad_shape[1]) % stride) / 2
+    unpad_shape = int(round(shape[1] * ratio)), int(round(shape[0] * ratio))
+    dW, dH = ((new_shape[1] - unpad_shape[0]) % stride) / 2, ((new_shape[0] - unpad_shape[1]) % stride) / 2
 
-    if shape0[::-1] != unpad_shape:
+    if shape[::-1] != unpad_shape:
         img = cv2.resize(img, unpad_shape, cv2.INTER_LINEAR)
 
     top, bottom = int(round(dH - 0.1)), int(round(dH + 0.1))

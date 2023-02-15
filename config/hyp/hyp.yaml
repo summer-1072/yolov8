@@ -1,4 +1,4 @@
-shape: [ 640, 640 ]
+shape: [ 640, 960 ]
 stride: 32
 
 # NMS
@@ -9,3 +9,18 @@ max_wh: 7680
 iou_t: 0.7
 max_det: 300
 merge: False
+
+# 图像增强
+augment: True # 是否采用图像增强
+mosaic: True # 是否采用Mosaic
+affine: True # 是否采用仿射变换
+hsv: 0.5 # 随机HSV增强
+flipud: 0 # 随机上下翻转
+fliplr: 0.5 # 随机左右翻转
+scale: 0.5 # 仿射变换：图像尺寸放缩
+translate: 0.1 # 仿射变换：图像平移
+h: 0.015  # HSV：H
+s: 0.7 # HSV：S
+v: 0.4 # HSV：V
+box_t: 5 # 最小检测目标尺寸
+wh_rt: 10 # 目标长宽比过滤阈值
