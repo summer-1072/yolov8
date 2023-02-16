@@ -5,45 +5,45 @@ import torchvision
 import numpy as np
 
 
-def dist2bbox(dist, grid):
-    left, top, right, bottom = dist.chunk(4, 1)
-    x, y = grid.chunk(2, 1)
+def dist2bbox(dist, grid, dim=-1):
+    left, top, right, bottom = dist.chunk(4, dim)
+    x, y = grid.chunk(2, dim)
 
-    return torch.cat((x - left, y - top, x + right, y + bottom), 1)
+    return torch.cat((x - left, y - top, x + right, y + bottom), dim)
 
 
-def xywh2xyxy(box):
+def xywh2xyxy(box, dim=-1):
     if isinstance(box, torch.Tensor):
-        x, y, w, h = box.chunk(4, 1)
+        x, y, w, h = box.chunk(4, dim)
 
-        return torch.cat((x - w / 2, y - h / 2, x + w / 2, y + h / 2), 1)
+        return torch.cat((x - w / 2, y - h / 2, x + w / 2, y + h / 2), dim)
 
     else:
         x, y, w, h = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack((x - w / 2, y - h / 2, x + w / 2, y + h / 2), 1)
+        return np.stack((x - w / 2, y - h / 2, x + w / 2, y + h / 2), dim)
 
 
-def xyxy2xywh(box):
+def xyxy2xywh(box, dim=-1):
     if isinstance(box, torch.Tensor):
-        x1, y1, x2, y2 = box.chunk(4, 1)
+        x1, y1, x2, y2 = box.chunk(4, dim)
 
-        return torch.cat(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), 1)
+        return torch.cat(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), dim)
 
     else:
         x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), 1)
+        return np.stack(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), dim)
 
 
-def xywh_norm2xyxy(box, w, h, offset_x, offset_y):
+def xywh_norm2xyxy(box, w, h, offset_x, offset_y, dim=-1):
     if isinstance(box, torch.Tensor):
-        bx, by, bw, bh = box.chunk(4, 1)
+        bx, by, bw, bh = box.chunk(4, dim)
 
         return torch.cat((w * (bx - bw / 2) + offset_x,
                           h * (by - bh / 2) + offset_y,
                           w * (bx + bw / 2) + offset_x,
-                          h * (by + bh / 2) + offset_y), 1)
+                          h * (by + bh / 2) + offset_y), dim)
 
     else:
         bx, by, bw, bh = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
@@ -51,24 +51,24 @@ def xywh_norm2xyxy(box, w, h, offset_x, offset_y):
         return np.stack((w * (bx - bw / 2) + offset_x,
                          h * (by - bh / 2) + offset_y,
                          w * (bx + bw / 2) + offset_x,
-                         h * (by + bh / 2) + offset_y), 1)
+                         h * (by + bh / 2) + offset_y), dim)
 
 
-def xyxy2xywh_norm(box, w, h):
+def xyxy2xywh_norm(box, w, h, dim=-1):
     if isinstance(box, torch.Tensor):
-        x1, y1, x2, y2 = box.chunk(4, 1)
+        x1, y1, x2, y2 = box.chunk(4, dim)
 
-        return torch.cat((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), 1)
+        return torch.cat((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
 
     else:
         x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), 1)
+        return np.stack((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
 
 
-def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-7):
-    b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, 1)
-    b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, 1)
+def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-7, dim=-1):
+    b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, dim)
+    b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, dim)
 
     if foreach:
         b1_x1 = b1_x1.unsqueeze(2)
@@ -147,14 +147,14 @@ def rescale_box(shape0, shape1, box):
 
 def non_max_suppression(preds, conf_t, multi_label, max_box, max_wh, iou_t, max_det, merge):
     B = preds.shape[0]
-    num_cls = preds.shape[1] - 4
-    candidates = preds[:, 4:4 + num_cls].amax(1) > conf_t
+    num_cls = preds.shape[2] - 4
+    candidates = preds[:, :, 4:4 + num_cls].amax(2) > conf_t
     multi_label &= (num_cls > 1)
 
     output = [torch.zeros((0, 6), device=preds.device)] * B
 
     for index, pred in enumerate(preds):
-        pred = pred.transpose(0, 1)[candidates[index]]
+        pred = pred[candidates[index]]
 
         if pred.shape[0] == 0:
             continue

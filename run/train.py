@@ -59,8 +59,8 @@ parser.add_argument('--train_img_dir', type=str, default='../dataset/bdd100k/ima
 parser.add_argument('--train_label_file', type=str, default='../dataset/bdd100k/labels/train.txt')
 parser.add_argument('--val_img_dir', type=str, default='../dataset/bdd100k/images/val')
 parser.add_argument('--val_label_file', type=str, default='../dataset/bdd100k/labels/val.txt')
-
 parser.add_argument('--cls_file', type=str, default='../dataset/bdd100k/cls.yaml')
+
 parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
 parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')

@@ -81,12 +81,13 @@ class SPPF(nn.Module):
 
 
 class Anchor(nn.Module):
-    def __init__(self, num_cls, reg_max, strides):
+    def __init__(self, num_cls, reg_max, strides, training):
         super().__init__()
 
         self.num_cls = num_cls
         self.reg_max = reg_max
         self.strides = strides
+        self.training = training
         self.num_out = reg_max * 4 + num_cls
         self.shape = None
         self.cpoints = torch.empty(0)
@@ -101,10 +102,10 @@ class Anchor(nn.Module):
             dtype, device = x[i].dtype, x[i].device
             grid_y, grid_x = torch.meshgrid(torch.arange(end=H, dtype=dtype, device=device) + 0.5,
                                             torch.arange(end=W, dtype=dtype, device=device) + 0.5)
-            cpoints.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2).expand(1, H * W, 2).permute(0, 2, 1))
-            cstrides.append(torch.full((1, H * W), stride, dtype=dtype, device=device))
+            cpoints.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2).expand(1, H * W, 2))
+            cstrides.append(torch.full((1, H * W, 1), stride, dtype=dtype, device=device))
 
-        return torch.cat(cpoints, 2), torch.cat(cstrides, 1)
+        return torch.cat(cpoints, 1), torch.cat(cstrides, 1)
 
     def forward(self, x):
         shape = x[0].shape  # B、C、H、W
@@ -118,6 +119,13 @@ class Anchor(nn.Module):
         B, C, A = box.shape
         dists = self.conv(box.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
 
-        dbox = xyxy2xywh(dist2bbox(dists, self.cpoints)) * self.cstrides
+        # B、A、C
+        dists = dists.permute(0, 2, 1).contiguous()
+        cls = cls.permute(0, 2, 1).contiguous()
 
-        return torch.cat((dbox, cls.sigmoid()), 1)
+        dbox = dist2bbox(dists, self.cpoints) * self.cstrides
+
+        if not self.training:
+            dbox = xyxy2xywh(dbox)
+
+        return torch.cat((dbox, cls.sigmoid()), 2)

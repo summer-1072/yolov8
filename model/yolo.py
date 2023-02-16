@@ -34,9 +34,7 @@ class YOLO(nn.Module):
             nn.Sequential(Conv(ch, ch1, 3, 1), Conv(ch1, ch1, 3, 1), nn.Conv2d(ch1, reg_max * 4, 1)) for ch in chs)
         self.conv2 = nn.ModuleList(
             nn.Sequential(Conv(ch, ch2, 3, 1), Conv(ch2, ch2, 3, 1), nn.Conv2d(ch2, num_cls, 1)) for ch in chs)
-        self.anchor = Anchor(num_cls, reg_max, strides)
-
-        self.training = training
+        self.anchor = Anchor(num_cls, reg_max, strides, training)
 
     def forward(self, x):
         # BackBone
@@ -68,7 +66,4 @@ class YOLO(nn.Module):
         y = [y14, y16, y18]
         y = [torch.cat((self.conv1[i](y[i]), self.conv2[i](y[i])), 1) for i in range(len(y))]
 
-        if self.training:
-            return y
-        else:
-            return self.anchor(y)
+        return self.anchor(y)
