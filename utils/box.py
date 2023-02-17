@@ -4,7 +4,7 @@ import torch
 import torchvision
 import numpy as np
 
-
+# B、A、C or A、C
 def dist2bbox(dist, grid, dim=-1):
     left, top, right, bottom = dist.chunk(4, dim)
     x, y = grid.chunk(2, dim)
