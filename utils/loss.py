@@ -59,4 +59,5 @@ targets = build_targets(targets, batch_size, scale)
 gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
 mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)
 print(targets)
+print(gt_labels)
 print(mask_gt)
