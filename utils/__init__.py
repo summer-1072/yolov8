@@ -2,6 +2,7 @@ import torch
 import math
 import numpy as np
 import torch.nn.functional as F
+from box import xyxy2xywh
 
 
 def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
@@ -54,11 +55,22 @@ preds = torch.tensor([
      [0.35, 0.45, 0.55, 2.05, 1.05, 3.05, 2.05],
      [0.40, 0.50, 0.60, 0.05, 2.05, 1.05, 3.05],
      [0.45, 0.55, 0.65, 1.05, 2.05, 2.05, 3.05],
+     [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05]],
+
+    [[0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
+     [0.15, 0.25, 0.35, 1.05, 0.05, 2.05, 1.05],
+     [0.20, 0.30, 0.40, 2.05, 0.05, 3.05, 1.05],
+     [0.25, 0.35, 0.45, 0.05, 1.05, 1.05, 2.05],
+     [0.30, 0.40, 0.50, 1.05, 1.05, 2.05, 2.05],
+     [0.35, 0.45, 0.55, 2.05, 1.05, 3.05, 2.05],
+     [0.40, 0.50, 0.60, 0.05, 2.05, 1.05, 3.05],
+     [0.45, 0.55, 0.65, 1.05, 2.05, 2.05, 3.05],
      [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05]]
 ])
 
 targets = torch.tensor([
-    [[0, 0.1, 0.9, 0.8, 1.6], [1, 1.2, 1.4, 2.2, 2.6]]
+    [[0, 0.0900, 0.0900, 1.8900, 1.8900], [1, 1.0950, 1.0950, 2.6850, 2.6850]],
+    [[2, 1.2000, 0.5850, 2.7000, 1.6950], [0., 0., 0., 0., 0.]]
 ])
 
 pd_scores, pd_bboxes = preds.split((3, 4), 2)
@@ -66,7 +78,10 @@ gt_labels, gt_bboxes = targets.split((1, 4), 2)
 
 # true mask
 mask_gt = torch.tensor([[[1],
-                         [1]]])
+                         [1]],
+                        [[1],
+                         [0]]
+                        ])
 
 # grid
 anc_points = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
@@ -74,37 +89,67 @@ anc_points = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
                            [0.5, 2.5], [1.5, 2.5], [2.5, 2.5]
                            ])
 
-ind = torch.zeros([2, 1, 2], dtype=torch.long)
-ind[0] = torch.arange(end=1).view(-1, 1).repeat(1, 2)
+# get_box_metrics
+ind = torch.zeros([2, 2, 2], dtype=torch.long)
+ind[0] = torch.arange(end=2).view(-1, 1).repeat(1, 2)
 ind[1] = gt_labels.long().squeeze(-1)
 bbox_scores = pd_scores[ind[0], :, ind[1]]
 overlaps = bbox_iou(gt_bboxes.unsqueeze(2), pd_bboxes.unsqueeze(1), xywh=False, CIoU=True).squeeze(3).clamp(0)
 align_metric = bbox_scores.pow(1) * overlaps.pow(1)
 
+# select_candidates_in_gts
 n_anchors = anc_points.shape[0]
 bs, n_boxes, _ = gt_bboxes.shape
 lt, rb = gt_bboxes.view(-1, 1, 4).chunk(2, 2)  # left-top, right-bottom
 bbox_deltas = torch.cat((anc_points[None] - lt, rb - anc_points[None]), dim=2).view(bs, n_boxes, n_anchors, -1)
 mask_in_gts = bbox_deltas.amin(3).gt_(1e-9)
 
-topk_mask = mask_gt.repeat([1, 1, 8]).bool()
+# select_topk_candidates
+topk_mask = mask_gt.repeat([1, 1, 4]).bool()
+match_metric = align_metric * mask_in_gts
 
-num_anchors = align_metric.shape[-1]  # h*w
+num_anchors = match_metric.shape[-1]  # h*w
 # (b, max_num_obj, topk)
-topk_metrics, topk_idxs = torch.topk(align_metric, 8, dim=-1, largest=True)
+topk_metrics, topk_idxs = torch.topk(match_metric, 4, dim=-1, largest=True)
+
 if topk_mask is None:
-    topk_mask = (topk_metrics.max(-1, keepdim=True) > 1e-9).tile([1, 1, 8])
+    topk_mask = (topk_metrics.max(-1, keepdim=True) > 1e-9).tile([1, 1, 4])
 # (b, max_num_obj, topk)
 topk_idxs = torch.where(topk_mask, topk_idxs, 0)
 # (b, max_num_obj, topk, h*w) -> (b, max_num_obj, h*w)
 is_in_topk = F.one_hot(topk_idxs, num_anchors).sum(-2)
+
 # filter invalid bboxes
 is_in_topk = torch.where(is_in_topk > 1, 0, is_in_topk)
 
+
 mask_pos = is_in_topk * mask_in_gts * mask_gt
 
-print(mask_pos)
-print(align_metric)
-print(overlaps)
+# select_highest_overlaps
+fg_mask = mask_pos.sum(-2)
+if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
+    mask_multi_gts = (fg_mask.unsqueeze(1) > 1).repeat([1, 2, 1])  # (b, n_max_boxes, h*w)
+    max_overlaps_idx = overlaps.argmax(1)  # (b, h*w)
+    is_max_overlaps = F.one_hot(max_overlaps_idx, 2)  # (b, h*w, n_max_boxes)
+    is_max_overlaps = is_max_overlaps.permute(0, 2, 1).to(overlaps.dtype)  # (b, n_max_boxes, h*w)
 
-# print(mask_gt.repeat([1, 1, 10]).bool())
+    mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos)  # (b, n_max_boxes, h*w)
+    fg_mask = mask_pos.sum(-2)
+# find each grid serve which gt(index)
+target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
+
+# get_targets
+batch_ind = torch.arange(end=2, dtype=torch.int64, device=gt_labels.device)[..., None]
+target_gt_idx = target_gt_idx + batch_ind * 2  # (b, h*w)
+
+target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
+
+# assigned target boxes, (b, max_num_obj, 4) -> (b, h*w)
+target_bboxes = gt_bboxes.view(-1, 4)[target_gt_idx]
+
+# assigned target scores
+target_labels.clamp(0)
+target_scores = F.one_hot(target_labels, 3)  # (b, h*w, 80)
+fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, 3)  # (b, h*w, 80)
+target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
+

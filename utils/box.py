@@ -4,6 +4,7 @@ import torch
 import torchvision
 import numpy as np
 
+
 # B、A、C or A、C
 def dist2bbox(dist, grid, dim=-1):
     left, top, right, bottom = dist.chunk(4, dim)
@@ -66,7 +67,7 @@ def xyxy2xywh_norm(box, w, h, dim=-1):
         return np.stack((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
 
 
-def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-7, dim=-1):
+def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-5, dim=-1):
     b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, dim)
     b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, dim)
 
@@ -76,8 +77,8 @@ def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-7, dim=-1):
         b1_x2 = b1_x2.unsqueeze(2)
         b1_y2 = b1_y2.unsqueeze(2)
 
-    w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1
-    w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1
+    w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
+    w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
 
     # Intersection Area
     inter = (torch.min(b1_x2, b2_x2) - torch.max(b1_x1, b2_x1)).clamp(0) * \
