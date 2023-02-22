@@ -67,15 +67,9 @@ def xyxy2xywh_norm(box, w, h, dim=-1):
         return np.stack((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
 
 
-def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-5, dim=-1):
+def bbox_iou(box1, box2, type='IoU', eps=1e-5, dim=-1):
     b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, dim)
     b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, dim)
-
-    if foreach:
-        b1_x1 = b1_x1.unsqueeze(2)
-        b1_y1 = b1_y1.unsqueeze(2)
-        b1_x2 = b1_x2.unsqueeze(2)
-        b1_y2 = b1_y2.unsqueeze(2)
 
     w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
     w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
@@ -109,7 +103,7 @@ def bbox_iou(box1, box2, foreach=False, type='IoU', eps=1e-5, dim=-1):
 
             iou = iou - (d2 / c2 + alpha * v)
 
-    return iou.squeeze(2) if foreach else iou
+    return iou
 
 
 def letterbox(img, new_shape, stride):
@@ -182,8 +176,8 @@ def non_max_suppression(preds, conf_t, multi_label, max_box, max_wh, iou_t, max_
         indices = indices[:max_det]
 
         if merge:
-            iou = bbox_iou(boxes[indices], boxes, True) > iou_t
-            weights = iou * confs[None]
+            iou = bbox_iou(boxes[indices].unsqueeze(1), boxes.unsqueeze(0)) > iou_t
+            weights = iou.squeeze(2) * confs.unsqueeze(0)
             pred[indices, :4] = torch.mm(weights, pred[:, :4]).float() / weights.sum(1, keepdim=True)
 
         output[index] = pred[indices]
