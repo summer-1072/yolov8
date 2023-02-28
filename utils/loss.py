@@ -4,117 +4,143 @@ from box import xywh2xyxy, bbox_iou
 
 
 class Loss:
-    def __init__(self, alpha, beta, topk, num_cls, device):
+    def __init__(self, alpha, beta, topk, device, eps=1e-8):
         self.alpha = alpha
         self.beta = beta
         self.topk = topk
-        self.num_cls = num_cls
         self.device = device
+        self.eps = eps
 
-    def format_labels(self, labels, preds, scale):
-        batch_size = preds.shape[0]
-
+    def prepare_params(self, labels, preds, gpoints, gstrides, img_size):
+        # format and scale labels
+        B = len(preds)
         if labels.shape[0] == 0:
-            out = torch.zeros(batch_size, 0, 5, device=self.device)
+            img_labels = torch.zeros(B, 0, 5, device=self.device)
         else:
             indices = labels[:, 0]
             index, count = indices.unique(return_counts=True)
-            out = torch.zeros(batch_size, count.max(), 5, device=self.device)
-            for index in range(batch_size):
+            img_labels = torch.zeros(B, count.max(), 5, device=self.device)
+            for index in range(B):
                 matches = indices == index
                 num = matches.sum()
                 if num:
-                    out[index, :num] = labels[matches, 1:]
+                    img_labels[index, :num] = labels[matches, 1:]
 
-            out[:, :, 1:5] = xywh2xyxy(out[:, :, 1:5] * scale)
+            img_labels[:, :, 1:5] = xywh2xyxy(img_labels[:, :, 1:5] * img_size[[1, 0, 1, 0]])
 
-        return out
+        # scale preds
+        img_preds = torch.cat([preds[:, :, :-4], preds[:, :, -4:] * gstrides], 2)
 
-    def search_positives(self, preds, labels, cpoints, mask, num_cls, eps=1e-5):
-        batch_size, box_size = labels.shape[:2]
-        anchor_size = preds.shape[1]
+        # scale grids
+        img_gpoints = gpoints * gstrides
 
-        # compute metric
-        index = torch.zeros([2, batch_size, box_size], dtype=torch.long)
-        index[0] = torch.arange(batch_size).view(-1, 1).repeat(1, box_size)
+        # label mask
+        mask = torch.gt(img_labels.sum(2, keepdim=True), 0).to(torch.int64)
+
+        return img_labels, img_preds, img_gpoints, mask
+
+    def build_metrics(self, labels, preds):
+        B, T = labels.shape[:2]
+
+        index = torch.zeros([2, B, T], dtype=torch.int64)
+        index[0] = torch.arange(B).view(-1, 1).repeat(1, T)
         index[1] = labels[:, :, 0]
-        cls = preds[:, :, 0:num_cls][index[0], :, index[1]]
-        iou = bbox_iou(labels[:, :, 1:5].unsqueeze(2), preds[:, :, num_cls:].unsqueeze(1), 'CIoU').squeeze(3).clamp(0)
+        cls = preds[:, :, 0:-4][index[0], :, index[1]]
+        iou = bbox_iou(labels[:, :, 1:5].unsqueeze(2), preds[:, :, -4:].unsqueeze(1), 'CIoU').squeeze(3).clamp(0)
         metric = cls.pow(self.alpha) * iou.pow(self.beta)
 
-        # match anchor
+        return cls, iou, metric
+
+    def build_mask_pos(self, labels, cpoints, mask, iou, metric):
+        B, T = labels.shape[:2]
+        A = metric.shape[2]
+
+        # match_pos
         left_top, right_bottom = labels[:, :, 1:5].view(-1, 1, 4).chunk(2, 2)
         deltas = torch.cat((cpoints.unsqueeze(0) - left_top, right_bottom - cpoints.unsqueeze(0)), 2).view(
-            batch_size, box_size, anchor_size, 4)
-        match_indices = deltas.amin(3).gt_(eps)
+            B, T, A, 4)
 
-        # top anchor
-        match_metric = metric * match_indices
-        top_metric, top_indices = torch.topk(match_metric, self.topk, 2)
+        match_pos = torch.gt(deltas.amin(3), self.eps).to(torch.int64)
+
+        # top_pos
+        match_metric = metric * match_pos
+        top_metric, top_pos = torch.topk(match_metric, self.topk, 2)
         if len(mask):
             top_mask = mask.repeat([1, 1, self.topk]).bool()
         else:
-            top_mask = (top_metric.max(2, keepdim=True).values > eps).repeat([1, 1, self.topk])
+            top_mask = (top_metric.max(2, keepdim=True).values > self.eps).repeat([1, 1, self.topk])
 
-        top_indices = torch.where(top_mask, top_indices, 0)
-        is_in_topk = F.one_hot(top_indices, anchor_size).sum(2)
-        top_indices = torch.where(is_in_topk > 1, 0, is_in_topk)
+        top_pos = torch.where(top_mask, top_pos, 0)
+        is_in_topk = F.one_hot(top_pos, A).sum(2)
+        top_pos = torch.where(is_in_topk > 1, 0, is_in_topk)
 
-        # candidate anchor
-        pos_indices = match_indices * top_indices * mask
+        mask_pos = match_pos * top_pos * mask
 
-        # duplicate anchor
-        repeat_pos_indices = pos_indices.sum(1)
-        if repeat_pos_indices.max() > 1:
-            repeat_pos_indices = (repeat_pos_indices.unsqueeze(1) > 1).repeat([1, box_size, 1])
-            iou_max_indices = iou.argmax(1)
-            iou_max_indices = F.one_hot(iou_max_indices, box_size)
-            iou_max_indices = iou_max_indices.permute(0, 2, 1).to(iou.dtype)
-            pos_indices = torch.where(repeat_pos_indices, iou_max_indices, pos_indices)
+        # drop duplicate
+        mask_pos_sum = mask_pos.sum(1)
+        if mask_pos_sum.max() > 1:
+            mask_pos_sum = (mask_pos_sum.unsqueeze(1) > 1).repeat([1, T, 1])
+            iou_max = iou.argmax(1)
+            iou_max = F.one_hot(iou_max, T)
+            iou_max = iou_max.permute(0, 2, 1)
 
-        return iou, metric, pos_indices
+            mask_pos = torch.where(mask_pos_sum, iou_max, mask_pos)
 
-    # def build_targets(self, iou, metric, mask_pos, labels):
-    #     mask_pos = index.sum(1)
-    #     max_pos = mask_pos.argmax(1)
-    #     ind = torch.arange(batch_size, dtype=torch.int64, device=self.device).unsqueeze(1)
-    #
-    #     max_pos = max_pos + ind * box_size
-    #     cls = labels[:, :, 0].long().flatten()[max_pos]
-    #     cls.clamp(0)
-    #
-    #     box = labels[:, :, 1:].view(-1, 4)[max_pos]
-    #     target_scores = F.one_hot(cls, 3)
-    #     print(target_scores)
-    #     fg_scores_mask = mask_pos[:, :, None].repeat(1, 1, 3)
-    #     print(fg_scores_mask)
-    #
-    #     target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
-    #     print(target_scores)
+        max_pos_max = mask_pos.argmax(1)
+        mask_pos_sum = mask_pos.sum(1)
 
-    def __call__(self, preds, labels, cpoints, masks):
+        return mask_pos, max_pos_max, mask_pos_sum
+
+    def build_
+
+    def build_targets(self, labels, preds, gpoints, gstrides, img_size):
+        img_labels, img_preds, img_gpoints, mask = self.prepare_params(labels, preds, gpoints, gstrides, img_size)
+
+        cls, iou, metric = self.build_metrics(img_labels, img_preds)
+
+        mask_pos, max_pos_max, mask_pos_sum = self.build_mask_pos(img_labels, img_gpoints, mask, iou, metric)
+
+        metric = metric * mask_pos
+        iou = iou * mask_pos
+        metric_max = metric.amax(axis=2, keepdim=True)
+        iou_max = iou.amax(axis=2, keepdim=True)
+
+        B, T = img_labels.shape[:2]
+        batch_index = torch.arange(B, dtype=torch.int64, device=self.device).unsqueeze(1)
+        max_pos_max = max_pos_max + batch_index * T
+
+        target_labels = img_labels[:, :, 0].flatten()[max_pos_max].to(torch.int64)
+        target_labels = F.one_hot(target_labels, self.num_cls)
+        mask_labels = mask_pos_sum.unsqueeze(2).repeat(1, 1, self.num_cls)
+        target_labels = torch.where(mask_labels > 0, target_labels, 0)
+
+        target_boxes = img_labels[:, :, 1:].view(-1, 4)[max_pos_max]
+
+        norm_metric = ((iou_max * metric) / (metric_max + self.eps)).amax(1).unsqueeze(2)
+        target_scores = target_labels * norm_metric
+
+        targets = torch.cat([target_scores, target_boxes], dim=2)
+
+        return targets, mask_pos_sum
+
+    def __call__(self, labels, preds, gpoints, gstrides, img_size):
+        # labels: B、T、1 + 4
         # preds: B、A、num_cls + 4
-        # labels: B、num_box、1 + 4
         # cpoints: A、2
-        # mask: B、num_box、1
+        # cstrides: A、1
+        # mask: B、T、1
 
-        labels = self.format_labels(labels, preds, scale)
-        iou, metric, pos_indices = self.search_positives(preds, labels, cpoints, masks, self.num_cls)
-
-        print(pos_indices)
+        targets, mask_pos = self.build_targets(labels, preds, gpoints, gstrides, img_size)
+        print(targets)
 
 
-# targets = torch.tensor([
-#     [[0, 0.0900, 0.0900, 1.8900, 1.8900], [1, 1.0950, 1.0950, 2.6850, 2.6850], [0., 0., 0., 0., 0.]],
-#     [[0, 0.09,1.0950, 0.9, 1.89], [1, 1.2000, 0.5850, 2.7000, 1.6950], [2., 0.09, 2.1, 2.9, 2.9]]
-# ])
 
-targets = torch.tensor([
-    [0, 0, 0.33, 0.33, 0.6, 0.6],
-    [0, 1, 0.63, 0.63, 0.53, 0.53],
-    [1, 0, 0.17, 0.5, 0.27, 0.27],
-    [1, 1, 0.65, 0.38, 0.5, 0.37],
-    [1, 2, 0.5, 0.83, 0.94, 0.27]])
+labels = torch.tensor([
+    [0, 0.0900, 0.0900, 1.8900, 1.8900],
+    [1, 1.0950, 1.0950, 2.6850, 2.6850],
+    [0, 0.1050, 1.0950, 0.9150, 1.9050],
+    [1, 1.2000, 0.5850, 2.7000, 1.6950],
+    [2, 0.0900, 2.0850, 2.9100, 2.8950]])
 
 preds = torch.tensor([
     [[0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
@@ -137,16 +163,13 @@ preds = torch.tensor([
      [0.45, 0.55, 0.65, 1.05, 2.05, 2.05, 3.05],
      [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05]]])
 
-# true mask
-masks = torch.tensor([[[1], [1], [0]], [[1], [1], [1]]])
-
 # grid
-cpoints = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
+gpoints = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
                         [0.5, 1.5], [1.5, 1.5], [2.5, 1.5],
                         [0.5, 2.5], [1.5, 2.5], [2.5, 2.5]])
-
+gstrides = torch.tensor([[8], [8], [8], [8], [8], [8], [8], [8], [8]])
 batch_size = 2
-scale = torch.tensor([3, 3, 3, 3])
+img_size = torch.tensor([24, 24])
 
-loss = Loss(1, 1, 3, 3, 'cpu')
-loss(preds, targets, cpoints, masks)
+loss = Loss(1, 1, 3, 'cpu')
+loss(labels, preds, gpoints, gstrides, img_size)

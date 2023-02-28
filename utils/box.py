@@ -13,6 +13,13 @@ def dist2bbox(dist, grid, dim=-1):
     return torch.cat((x - left, y - top, x + right, y + bottom), dim)
 
 
+def bbox2dist(bbox, grid, reg_max, dim=-1):
+    left, top, right, bottom = bbox.chunk(4, dim)
+    x, y = grid.chunk(2, dim)
+
+    return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 0.01)
+
+
 def xywh2xyxy(box, dim=-1):
     if isinstance(box, torch.Tensor):
         x, y, w, h = box.chunk(4, dim)
@@ -155,7 +162,6 @@ def non_max_suppression(preds, conf_t, multi_label, max_box, max_wh, iou_t, max_
             continue
 
         box, cls = pred.split((4, num_cls), 1)
-        box = xywh2xyxy(box)
 
         if multi_label:
             i, j = (cls > conf_t).nonzero(as_tuple=False).T

@@ -92,7 +92,7 @@ def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
 
 class TaskAlignedAssigner(nn.Module):
 
-    def __init__(self, topk=3, num_classes=80, alpha=1.0, beta=1.0, eps=1e-9):
+    def __init__(self, topk=3, num_classes=3, alpha=1.0, beta=1.0, eps=1e-9):
         super().__init__()
         self.topk = topk
         self.num_classes = num_classes
@@ -132,12 +132,7 @@ class TaskAlignedAssigner(nn.Module):
         mask_pos, align_metric, overlaps = self.get_pos_mask(pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points,
                                                              mask_gt)
 
-        print(overlaps)
-        print(align_metric)
-
         target_gt_idx, fg_mask, mask_pos = select_highest_overlaps(mask_pos, overlaps, self.n_max_boxes)
-
-        print(mask_pos)
 
         # assigned target
         target_labels, target_bboxes, target_scores = self.get_targets(gt_labels, gt_bboxes, target_gt_idx, fg_mask)
@@ -146,8 +141,11 @@ class TaskAlignedAssigner(nn.Module):
         align_metric *= mask_pos
         pos_align_metrics = align_metric.amax(axis=-1, keepdim=True)  # b, max_num_obj
         pos_overlaps = (overlaps * mask_pos).amax(axis=-1, keepdim=True)  # b, max_num_obj
+
         norm_align_metric = (align_metric * pos_overlaps / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
+
+        print(target_scores)
 
         return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
 
@@ -210,16 +208,21 @@ class TaskAlignedAssigner(nn.Module):
 
         # assigned target labels, (b, 1)
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
-        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
-        target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
 
+        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
+
+        target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
         # assigned target boxes, (b, max_num_obj, 4) -> (b, h*w)
+
         target_bboxes = gt_bboxes.view(-1, 4)[target_gt_idx]
 
         # assigned target scores
         target_labels.clamp(0)
+
         target_scores = F.one_hot(target_labels, self.num_classes)  # (b, h*w, 80)
+
         fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, self.num_classes)  # (b, h*w, 80)
+
         target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
 
         return target_labels, target_bboxes, target_scores

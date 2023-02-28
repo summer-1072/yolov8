@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from box import dist2bbox, xyxy2xywh
+from box import dist2bbox
 
 
 class Conv(nn.Module):
@@ -90,28 +90,28 @@ class Anchor(nn.Module):
         self.training = training
         self.num_out = reg_max * 4 + num_cls
         self.shape = None
-        self.cpoints = torch.empty(0)
-        self.cstrides = torch.empty(0)
+        self.gpoints = torch.empty(0)
+        self.gstrides = torch.empty(0)
         self.conv = nn.Conv2d(reg_max, 1, 1, bias=False).requires_grad_(False)
         self.conv.weight.data[:] = nn.Parameter(torch.arange(reg_max, dtype=torch.float).view(1, reg_max, 1, 1))
 
-    def make_centers(self, x):
-        cpoints, cstrides = [], []
+    def make_grids(self, x):
+        gpoints, gstrides = [], []
         for i, stride in enumerate(self.strides):
             B, C, H, W = x[i].shape
             dtype, device = x[i].dtype, x[i].device
             grid_y, grid_x = torch.meshgrid(torch.arange(end=H, dtype=dtype, device=device) + 0.5,
                                             torch.arange(end=W, dtype=dtype, device=device) + 0.5)
-            cpoints.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2).expand(1, H * W, 2))
-            cstrides.append(torch.full((1, H * W, 1), stride, dtype=dtype, device=device))
+            gpoints.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2))
+            gstrides.append(torch.full((H * W, 1), stride, dtype=dtype, device=device))
 
-        return torch.cat(cpoints, 1), torch.cat(cstrides, 1)
+        return torch.cat(gpoints, 0), torch.cat(gstrides, 0)
 
     def forward(self, x):
         shape = x[0].shape  # B、C、H、W
         if self.shape != shape:
             self.shape = shape
-            self.cpoints, self.cstrides = self.make_centers(x)
+            self.gpoints, self.gstrides = self.make_grids(x)
 
         box, cls = torch.cat([xi.view(shape[0], self.num_out, -1) for xi in x], 2).split(
             (self.reg_max * 4, self.num_cls), 1)
@@ -123,9 +123,11 @@ class Anchor(nn.Module):
         dists = dists.permute(0, 2, 1).contiguous()
         cls = cls.permute(0, 2, 1).contiguous()
 
-        dbox = dist2bbox(dists, self.cpoints) * self.cstrides
+        dbox = dist2bbox(dists, self.gpoints) * self.gstrides
 
         if not self.training:
-            dbox = xyxy2xywh(dbox)
+            return torch.cat((dbox, cls.sigmoid()), 2)
 
-        return torch.cat((dbox, cls.sigmoid()), 2)
+        else:
+            img_size = torch.tensor(x[0].shape[2:]) * self.strides[0]
+            return torch.cat((dbox, cls.sigmoid()), 2), self.gpoints, self.gstrides, img_size
