@@ -123,11 +123,11 @@ class Anchor(nn.Module):
         dists = dists.permute(0, 2, 1).contiguous()
         cls = cls.permute(0, 2, 1).contiguous()
 
-        dbox = dist2bbox(dists, self.gpoints) * self.gstrides
+        dbox = dist2bbox(dists, self.gpoints)
+        cls = cls.sigmoid()
 
         if not self.training:
-            return torch.cat((dbox, cls.sigmoid()), 2)
+            return torch.cat((dbox * self.gstrides, cls), 2)
 
         else:
-            img_size = torch.tensor(x[0].shape[2:]) * self.strides[0]
-            return torch.cat((dbox, cls.sigmoid()), 2), self.gpoints, self.gstrides, img_size
+            return dbox, cls, dists, self.gpoints, self.gstrides

@@ -145,15 +145,15 @@ class TaskAlignedAssigner(nn.Module):
         norm_align_metric = (align_metric * pos_overlaps / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
 
-        print(target_scores)
-
         return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
 
     def get_pos_mask(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt):
         # get anchor_align metric, (b, max_num_obj, h*w)
         align_metric, overlaps = self.get_box_metrics(pd_scores, pd_bboxes, gt_labels, gt_bboxes)
+
         # get in_gts mask, (b, max_num_obj, h*w)
         mask_in_gts = select_candidates_in_gts(anc_points, gt_bboxes)
+
         # get topk_metric mask, (b, max_num_obj, h*w)
         mask_topk = self.select_topk_candidates(align_metric * mask_in_gts,
                                                 topk_mask=mask_gt.repeat([1, 1, self.topk]).bool())
@@ -174,6 +174,7 @@ class TaskAlignedAssigner(nn.Module):
 
         overlaps = bbox_iou(gt_bboxes.unsqueeze(2), pd_bboxes.unsqueeze(1), xywh=False, CIoU=True).squeeze(3).clamp(0)
         align_metric = bbox_scores.pow(self.alpha) * overlaps.pow(self.beta)
+
 
         return align_metric, overlaps
 
@@ -228,6 +229,23 @@ class TaskAlignedAssigner(nn.Module):
         return target_labels, target_bboxes, target_scores
 
 
+# labels = torch.tensor([
+#     [0, 0, 0.1, 0.1, 0.6, 0.6],
+#     [0, 1, 0.4, 0.4, 0.9, 0.9],
+#     [1, 0, 0.1, 0.4, 0.3, 0.6],
+#     [1, 1, 0.4, 0.1, 0.9, 0.5],
+#     [1, 2, 0.1, 0.7, 0.9, 0.9]])
+
+labels = torch.tensor([
+    [[0, 0.1, 0.1, 0.6, 0.6],
+     [1, 0.4, 0.4, 0.9, 0.9],
+     [0, 0.0, 0.0, 0.0, 0.0]],
+
+    [[0, 0.1, 0.4, 0.3, 0.6],
+     [1, 0.4, 0.1, 0.9, 0.5],
+     [2, 0.1, 0.7, 0.9, 0.9]]
+])
+
 preds = torch.tensor([
     [[0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
      [0.15, 0.25, 0.35, 1.05, 0.05, 2.05, 1.05],
@@ -237,7 +255,12 @@ preds = torch.tensor([
      [0.35, 0.45, 0.55, 2.05, 1.05, 3.05, 2.05],
      [0.40, 0.50, 0.60, 0.05, 2.05, 1.05, 3.05],
      [0.45, 0.55, 0.65, 1.05, 2.05, 2.05, 3.05],
-     [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05]],
+     [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05],
+
+     [0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
+     [0.15, 0.25, 0.35, 1.05, 0.05, 2.05, 1.05],
+     [0.20, 0.30, 0.40, 0.05, 1.05, 1.05, 2.05],
+     [0.25, 0.35, 0.45, 1.05, 1.05, 2.05, 2.05]],
 
     [[0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
      [0.15, 0.25, 0.35, 1.05, 0.05, 2.05, 1.05],
@@ -247,16 +270,16 @@ preds = torch.tensor([
      [0.35, 0.45, 0.55, 2.05, 1.05, 3.05, 2.05],
      [0.40, 0.50, 0.60, 0.05, 2.05, 1.05, 3.05],
      [0.45, 0.55, 0.65, 1.05, 2.05, 2.05, 3.05],
-     [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05]]
+     [0.50, 0.60, 0.70, 2.05, 2.05, 3.05, 3.05],
+
+     [0.10, 0.20, 0.30, 0.05, 0.05, 1.05, 1.05],
+     [0.15, 0.25, 0.35, 1.05, 0.05, 2.05, 1.05],
+     [0.20, 0.30, 0.40, 0.05, 1.05, 1.05, 2.05],
+     [0.25, 0.35, 0.45, 1.05, 1.05, 2.05, 2.05]]
 ])
 
-targets = torch.tensor([
-    [[0, 0.0900, 0.0900, 1.8900, 1.8900], [1, 1.0950, 1.0950, 2.6850, 2.6850], [0., 0., 0., 0., 0.]],
-    [[0, 0.1050, 1.0950, 0.9150, 1.9050], [1, 1.2000, 0.5850, 2.7000, 1.6950], [2., 0.0900, 2.0850, 2.9100, 2.8950]]
-])
-
-pd_scores, pd_bboxes = preds.split((3, 4), 2)
-gt_labels, gt_bboxes = targets.split((1, 4), 2)
+gstrides = torch.tensor([[4], [4], [4], [4], [4], [4], [4], [4], [4], [6], [6], [6], [6]])
+img_size = torch.tensor([12, 12])
 
 # true mask
 mask_gt = torch.tensor([[[1],
@@ -270,8 +293,18 @@ mask_gt = torch.tensor([[[1],
 # grid
 anc_points = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
                            [0.5, 1.5], [1.5, 1.5], [2.5, 1.5],
-                           [0.5, 2.5], [1.5, 2.5], [2.5, 2.5]
+                           [0.5, 2.5], [1.5, 2.5], [2.5, 2.5],
+
+                           [0.5, 0.5], [1.5, 0.5],
+                           [0.5, 1.5], [1.5, 1.5]
                            ])
+
+pd_scores, pd_bboxes = preds.split((3, 4), 2)
+gt_labels, gt_bboxes = labels.split((1, 4), 2)
+
+pd_bboxes = pd_bboxes * gstrides
+anc_points = anc_points * gstrides
+gt_bboxes = gt_bboxes * img_size[[1, 0, 1, 0]]
 
 t = TaskAlignedAssigner()
 t(pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt)
