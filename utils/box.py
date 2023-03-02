@@ -6,14 +6,14 @@ import numpy as np
 
 
 # B、A、C or A、C
-def dist2bbox(dist, grid, dim=-1):
-    left, top, right, bottom = dist.chunk(4, dim)
+def gap2box(gap, grid, dim=-1):
+    left, top, right, bottom = gap.chunk(4, dim)
     x, y = grid.chunk(2, dim)
 
     return torch.cat((x - left, y - top, x + right, y + bottom), dim)
 
 
-def bbox2dist(box, grid, reg_max, dim=-1):
+def box2gap(box, grid, reg_max, dim=-1):
     left, top, right, bottom = box.chunk(4, dim)
     x, y = grid.chunk(2, dim)
 

@@ -90,6 +90,36 @@ def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
     return target_gt_idx, fg_mask, mask_pos
 
 
+def bbox2dist(anchor_points, bbox, reg_max):
+    """Transform bbox(xyxy) to dist(ltrb)."""
+    x1y1, x2y2 = torch.split(bbox, 2, -1)
+    return torch.cat((anchor_points - x1y1, x2y2 - anchor_points), -1).clamp(0, reg_max - 0.01)  # dist (lt, rb)
+
+
+class BboxLoss(nn.Module):
+
+    def __init__(self, reg_max, use_dfl=False):
+        super().__init__()
+        self.reg_max = reg_max
+        self.use_dfl = use_dfl
+
+    def forward(self, pred_dist, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask):
+        # IoU loss
+        weight = torch.masked_select(target_scores.sum(-1), fg_mask).unsqueeze(-1)
+        iou = bbox_iou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
+        loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
+
+        # DFL loss
+        if self.use_dfl:
+            target_ltrb = bbox2dist(anchor_points, target_bboxes, self.reg_max)
+            loss_dfl = self._df_loss(pred_dist[fg_mask].view(-1, self.reg_max + 1), target_ltrb[fg_mask]) * weight
+            loss_dfl = loss_dfl.sum() / target_scores_sum
+        else:
+            loss_dfl = torch.tensor(0.0).to(pred_dist.device)
+
+        return loss_iou, loss_dfl
+
+
 class TaskAlignedAssigner(nn.Module):
 
     def __init__(self, topk=3, num_classes=3, alpha=1.0, beta=1.0, eps=1e-9):
@@ -308,7 +338,20 @@ gt_bboxes = gt_bboxes * img_size[[1, 0, 1, 0]]
 t = TaskAlignedAssigner()
 target_labels, target_bboxes, target_scores, fg_mask, target_gt_idx = t(pd_scores, pd_bboxes, anc_points,
                                                                         gt_labels, gt_bboxes, mask_gt)
+loss = torch.zeros(3)  # box, cls, dfl
 
 target_bboxes /= gstrides
 target_scores_sum = max(target_scores.sum(), 1)
 
+bce = nn.BCEWithLogitsLoss(reduction='none')
+
+# cls loss
+# loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
+loss[1] = bce(pd_scores, target_scores).sum() / target_scores_sum  # BCE
+
+bbox_loss = BboxLoss(8, use_dfl=True)
+
+# bbox loss
+# if fg_mask.sum():
+#     loss[0], loss[2] = bbox_loss(pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores,
+#                                  target_scores_sum, fg_mask)

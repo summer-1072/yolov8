@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from box import bbox_iou, bbox2dist
+from box import bbox_iou, box2gap
 
 
 class BoxLoss(nn.Module):
@@ -9,8 +9,17 @@ class BoxLoss(nn.Module):
         super(BoxLoss).__init__()
         self.reg_max = reg_max
 
-    def forward(self, targets, preds, gpoints, mask_pos):
-        pass
+    def forward(self, pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos):
+        # iou loss
+        weight = torch.masked_select(target_score.sum(2), mask_pos).unsqueeze(1)
+        pos_pred_box, pos_target_box = pred_box[mask_pos], target_box[mask_pos]
+        iou = bbox_iou(pos_pred_box, pos_target_box, 'CIoU')
+        iou_loss = ((1.0 - iou) * weight).sum() / score_sum
+
+        # dist focal loss
+        pos_pred_dist, pos_target_gap = pred_dist[mask_pos].view(-1, self.reg_max), target_gap[mask_pos]
+
+        pos_target_gap.long()
 
 
 class Loss:
@@ -131,23 +140,33 @@ class Loss:
         norm_metric = ((iou_max * metric) / (metric_max + self.eps)).amax(1).unsqueeze(2)
         target_score = target_cls * norm_metric
 
-        # compute target dist
-        target_dist = bbox2dist(target_box, grid, self.reg_max)
+        # compute target gap
+        target_gap = box2gap(target_box, grid, self.reg_max)
 
-        return target_box, target_score, target_dist, mask_pos_sum.bool()
+        return target_box, target_score, target_gap, mask_pos_sum.bool()
 
     def __call__(self, labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
-        target_box, target_score, target_dist, mask_pos = self.build_targets(labels, pred_box, pred_cls,
-                                                                             grid, grid_stride, img_size)
+        target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box, pred_cls,
+                                                                            grid, grid_stride, img_size)
 
         score_sum = max(target_score.sum(), 1)
 
         loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
 
-        if mask_pos.sum():
-            print(mask_pos.sum())
+        a = target_gap[mask_pos]
+        # print(a)
+
+        # tl = a.long()  # target left
+        # tr = tl + 1  # target right
+        # wl = tr - a  # weight left
+        # wr = 1 - wl  # weight right
+        #
+        # print(pred_dist[mask_pos].shape)
+        # print(tl.view(-1).shape)
+        #
+        F.cross_entropy(pred_dist[mask_pos].view(-1, self.reg_max), tl.view(-1), reduction="none")
 
 
 labels = torch.tensor([
@@ -182,15 +201,33 @@ pred_cls = torch.tensor([
 ])
 
 pred_dist = torch.tensor([
-    [[0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55]],
+    [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]],
 
-    [[0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55],
-     [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55], [0.45, 0.45, 0.55, 0.55]]
+    [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6],
+     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]]
 ])
 
 grid = torch.tensor([[0.5, 0.5], [1.5, 0.5], [2.5, 0.5],
@@ -204,5 +241,5 @@ grid_stride = torch.tensor([[4], [4], [4], [4], [4], [4], [4], [4], [4], [6], [6
 
 img_size = torch.tensor([12, 12])
 
-loss = Loss(1, 1, 3, 16, 'cpu')
+loss = Loss(1, 1, 3, 4, 'cpu')
 loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size)

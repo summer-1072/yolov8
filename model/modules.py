@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from box import dist2bbox
+from box import gap2box
 
 
 class Conv(nn.Module):
@@ -113,21 +113,21 @@ class Anchor(nn.Module):
             self.shape = shape
             self.grid, self.grid_stride = self.make_grid(x)
 
-        box, cls = torch.cat([xi.view(shape[0], self.num_out, -1) for xi in x], 2).split(
+        dist, cls = torch.cat([xi.view(shape[0], self.num_out, -1) for xi in x], 2).split(
             (self.reg_max * 4, self.num_cls), 1)
 
-        B, C, A = box.shape
-        dist = self.conv(box.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
+        B, C, A = dist.shape
+        gap = self.conv(dist.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
 
         # B、A、C
-        dist = dist.permute(0, 2, 1).contiguous()
+        gap = gap.permute(0, 2, 1).contiguous()
         cls = cls.permute(0, 2, 1).contiguous()
 
-        dbox = dist2bbox(dist, self.grid)
+        box = gap2box(gap, self.grid)
         cls = cls.sigmoid()
 
         if not self.training:
-            return torch.cat((dbox * self.grid_stride, cls), 2)
+            return torch.cat((box * self.grid_stride, cls), 2)
 
         else:
-            return dbox, cls, dist, self.grid, self.grid_stride
+            return box, cls, dist, self.grid, self.grid_stride
