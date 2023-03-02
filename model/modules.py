@@ -90,44 +90,44 @@ class Anchor(nn.Module):
         self.training = training
         self.num_out = reg_max * 4 + num_cls
         self.shape = None
-        self.gpoints = torch.empty(0)
-        self.gstrides = torch.empty(0)
+        self.grid = torch.empty(0)
+        self.grid_stride = torch.empty(0)
         self.conv = nn.Conv2d(reg_max, 1, 1, bias=False).requires_grad_(False)
         self.conv.weight.data[:] = nn.Parameter(torch.arange(reg_max, dtype=torch.float).view(1, reg_max, 1, 1))
 
-    def make_grids(self, x):
-        gpoints, gstrides = [], []
+    def make_grid(self, x):
+        grids, grid_strides = [], []
         for i, stride in enumerate(self.strides):
             B, C, H, W = x[i].shape
             dtype, device = x[i].dtype, x[i].device
             grid_y, grid_x = torch.meshgrid(torch.arange(end=H, dtype=dtype, device=device) + 0.5,
                                             torch.arange(end=W, dtype=dtype, device=device) + 0.5)
-            gpoints.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2))
-            gstrides.append(torch.full((H * W, 1), stride, dtype=dtype, device=device))
+            grids.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2))
+            grid_strides.append(torch.full((H * W, 1), stride, dtype=dtype, device=device))
 
-        return torch.cat(gpoints, 0), torch.cat(gstrides, 0)
+        return torch.cat(grids, 0), torch.cat(grid_strides, 0)
 
     def forward(self, x):
         shape = x[0].shape  # B、C、H、W
         if self.shape != shape:
             self.shape = shape
-            self.gpoints, self.gstrides = self.make_grids(x)
+            self.grid, self.grid_stride = self.make_grid(x)
 
         box, cls = torch.cat([xi.view(shape[0], self.num_out, -1) for xi in x], 2).split(
             (self.reg_max * 4, self.num_cls), 1)
 
         B, C, A = box.shape
-        dists = self.conv(box.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
+        dist = self.conv(box.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
 
         # B、A、C
-        dists = dists.permute(0, 2, 1).contiguous()
+        dist = dist.permute(0, 2, 1).contiguous()
         cls = cls.permute(0, 2, 1).contiguous()
 
-        dbox = dist2bbox(dists, self.gpoints)
+        dbox = dist2bbox(dist, self.grid)
         cls = cls.sigmoid()
 
         if not self.training:
-            return torch.cat((dbox * self.gstrides, cls), 2)
+            return torch.cat((dbox * self.grid_stride, cls), 2)
 
         else:
-            return dbox, cls, dists, self.gpoints, self.gstrides
+            return dbox, cls, dist, self.grid, self.grid_stride

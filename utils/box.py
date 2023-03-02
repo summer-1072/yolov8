@@ -13,8 +13,8 @@ def dist2bbox(dist, grid, dim=-1):
     return torch.cat((x - left, y - top, x + right, y + bottom), dim)
 
 
-def bbox2dist(bbox, grid, reg_max, dim=-1):
-    left, top, right, bottom = bbox.chunk(4, dim)
+def bbox2dist(box, grid, reg_max, dim=-1):
+    left, top, right, bottom = box.chunk(4, dim)
     x, y = grid.chunk(2, dim)
 
     return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 0.01)

@@ -175,7 +175,6 @@ class TaskAlignedAssigner(nn.Module):
         overlaps = bbox_iou(gt_bboxes.unsqueeze(2), pd_bboxes.unsqueeze(1), xywh=False, CIoU=True).squeeze(3).clamp(0)
         align_metric = bbox_scores.pow(self.alpha) * overlaps.pow(self.beta)
 
-
         return align_metric, overlaps
 
     def select_topk_candidates(self, metrics, largest=True, topk_mask=None):
@@ -307,4 +306,9 @@ anc_points = anc_points * gstrides
 gt_bboxes = gt_bboxes * img_size[[1, 0, 1, 0]]
 
 t = TaskAlignedAssigner()
-t(pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt)
+target_labels, target_bboxes, target_scores, fg_mask, target_gt_idx = t(pd_scores, pd_bboxes, anc_points,
+                                                                        gt_labels, gt_bboxes, mask_gt)
+
+target_bboxes /= gstrides
+target_scores_sum = max(target_scores.sum(), 1)
+
