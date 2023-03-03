@@ -155,18 +155,11 @@ class Loss:
 
         loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
 
-        a = target_gap[mask_pos]
-        # print(a)
-
-        # tl = a.long()  # target left
-        # tr = tl + 1  # target right
-        # wl = tr - a  # weight left
-        # wr = 1 - wl  # weight right
-        #
-        # print(pred_dist[mask_pos].shape)
-        # print(tl.view(-1).shape)
-        #
-        F.cross_entropy(pred_dist[mask_pos].view(-1, self.reg_max), tl.view(-1), reduction="none")
+        a = pred_dist[mask_pos].view(-1, self.reg_max)
+        b = target_gap[mask_pos]
+        print(b.view(-1))
+        c = F.cross_entropy(a, b.view(-1).long(), reduction="none")
+        print(c)
 
 
 labels = torch.tensor([
