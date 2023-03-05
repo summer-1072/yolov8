@@ -6,32 +6,52 @@ from box import bbox_iou, box2gap
 
 class BoxLoss(nn.Module):
     def __init__(self, reg_max):
-        super(BoxLoss).__init__()
+        super().__init__()
         self.reg_max = reg_max
 
+    def build_iou_loss(self, pred_box, target_box, weight, score_sum):
+        iou = bbox_iou(pred_box, target_box, 'CIoU')
+        return ((1.0 - iou) * weight).sum() / score_sum
+
+    def build_dfl_loss(self, pred_dist, target_gap, weight, score_sum):
+        pred_dist = pred_dist.view(-1, self.reg_max)
+
+        gap_min = target_gap.long()
+        gap_max = gap_min + 1
+        weight_min = gap_max - target_gap
+        weight_max = 1 - weight_min
+
+        loss1 = F.cross_entropy(pred_dist, gap_min.view(-1), reduction="none").view(gap_min.shape) * weight_min
+        loss2 = F.cross_entropy(pred_dist, gap_max.view(-1), reduction="none").view(gap_max.shape) * weight_max
+
+        return ((loss1 + loss2).mean(-1, keepdim=True) * weight).sum() / score_sum
+
     def forward(self, pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos):
-        # iou loss
         weight = torch.masked_select(target_score.sum(2), mask_pos).unsqueeze(1)
-        pos_pred_box, pos_target_box = pred_box[mask_pos], target_box[mask_pos]
-        iou = bbox_iou(pos_pred_box, pos_target_box, 'CIoU')
-        iou_loss = ((1.0 - iou) * weight).sum() / score_sum
+
+        # iou loss
+        iou_loss = self.build_iou_loss(pred_box[mask_pos], target_box[mask_pos], weight, score_sum)
 
         # dist focal loss
-        pos_pred_dist, pos_target_gap = pred_dist[mask_pos].view(-1, self.reg_max), target_gap[mask_pos]
+        dfl_loss = self.build_dfl_loss(pred_dist[mask_pos], target_gap[mask_pos], weight, score_sum)
 
-        pos_target_gap.long()
+        return iou_loss, dfl_loss
 
 
 class Loss:
-    def __init__(self, alpha, beta, topk, reg_max, device, eps=1e-8):
+    def __init__(self, alpha, beta, topk, reg_max, box_w, cls_w, dfl_w, device, eps=1e-8):
         self.alpha = alpha
         self.beta = beta
         self.topk = topk
         self.reg_max = reg_max
+        self.box_w = box_w
+        self.cls_w = cls_w
+        self.dfl_w = dfl_w
         self.device = device
         self.eps = eps
 
         self.bce = nn.BCELoss(reduction='none')
+        self.boxloss = BoxLoss(reg_max)
 
     def preprocess(self, labels, batch_size):
         if labels.shape[0] == 0:
@@ -148,18 +168,20 @@ class Loss:
     def __call__(self, labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
-        target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box, pred_cls,
-                                                                            grid, grid_stride, img_size)
+        target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box.detach(),
+                                                                            pred_cls.detach(), grid,
+                                                                            grid_stride, img_size)
 
         score_sum = max(target_score.sum(), 1)
 
-        loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
+        loss[1] = self.bce(pred_cls, target_score.sigmoid()).sum() / score_sum
+        loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos)
 
-        a = pred_dist[mask_pos].view(-1, self.reg_max)
-        b = target_gap[mask_pos]
-        print(b.view(-1))
-        c = F.cross_entropy(a, b.view(-1).long(), reduction="none")
-        print(c)
+        loss[0] *= self.box_w
+        loss[1] *= self.cls_w
+        loss[2] *= self.dfl_w
+
+        return loss.sum() * pred_cls.shape[0], loss.detach()
 
 
 labels = torch.tensor([
@@ -234,5 +256,5 @@ grid_stride = torch.tensor([[4], [4], [4], [4], [4], [4], [4], [4], [4], [6], [6
 
 img_size = torch.tensor([12, 12])
 
-loss = Loss(1, 1, 3, 4, 'cpu')
+loss = Loss(1, 1, 3, 4, 1, 1, 1, 'cpu')
 loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size)

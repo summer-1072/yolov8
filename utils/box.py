@@ -17,7 +17,7 @@ def box2gap(box, grid, reg_max, dim=-1):
     left, top, right, bottom = box.chunk(4, dim)
     x, y = grid.chunk(2, dim)
 
-    return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 0.01)
+    return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 1.01)
 
 
 def xywh2xyxy(box, dim=-1):

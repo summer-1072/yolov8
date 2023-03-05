@@ -42,16 +42,23 @@ def train(args):
         weight_file = os.path.join(log_dir, 'weight.pth')
 
     # plot label
-    plot_labels(dataset.labels, cls, os.path.join(log_dir, 'label.jpg'))
+    # plot_labels(dataset.labels, cls, os.path.join(log_dir, 'label.jpg'))
 
     # load model
     model = load_model(args.model_file, weight_file, args.training, args.fused)
     model.to(device)
     model.train()
 
-    pbar = tqdm(dataloader, ncols=100, desc="Epoch {}".format(1))
-    for index, (imgs, labels) in enumerate(pbar):
-        plot_images(imgs, labels, os.path.join(log_dir + '/imgs', str(index) + '.jpg'))
+    from torch import nn
+
+    bn = tuple(v for k, v in nn.__dict__.items() if 'Norm' in k)  # normalization layers, i.e. BatchNorm2d()
+    print('bn', bn)
+    for v in model.modules():
+        if isinstance(v, nn.BatchNorm2d):
+            print(v.weight)
+    # pbar = tqdm(dataloader, ncols=100, desc="Epoch {}".format(1))
+    # for index, (imgs, labels) in enumerate(pbar):
+    #     plot_images(imgs, labels, os.path.join(log_dir + '/imgs', str(index) + '.jpg'))
 
 
 parser = argparse.ArgumentParser()
