@@ -10,6 +10,44 @@ from torch.utils.data import DataLoader
 from plot import plot_images, plot_labels
 from dataset import build_labels, LoadDataset
 from torch.optim import lr_scheduler
+from copy import deepcopy
+
+
+class EarlyStopping:
+    def __init__(self, patience=50):
+        self.best_epoch = 0
+        self.best_fitness = 0.0
+        self.patience = patience or float('inf')
+
+    def __call__(self, epoch, fitness):
+        if fitness >= self.best_fitness:
+            self.best_epoch = epoch
+            self.best_fitness = fitness
+
+        stop = epoch - self.best_epoch >= self.patience
+
+        if stop:
+            print(f'stop training early at {epoch}th epoch, the best one is {self.best_epoch}th epoch')
+
+        return stop
+
+
+class ModelEMA:
+    def __int__(self, model, decay=0.9999, tau=2000, updates=0):
+        self.model = deepcopy(model).eval()
+        for param in self.model.parameters():
+            param.requires_grad_(False)
+
+        self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
+        self.updates = updates
+
+    def update(self, model):
+        self.updates += 1
+        decay = self.decay_fun(self.updates)
+
+        for k, v in self.model.state_dict().items():
+            if v.dtype.is_floating_point:
+                v = v * decay + (1 - decay) * model.state_dict()[k].detach()
 
 
 class Train:
@@ -59,4 +97,3 @@ class Train:
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
         scheduler.last_epoch = self.start_epoch - 1  # do not move
         # self.stopper, self.stop = EarlyStopping(patience=self.args.patience), False
-
