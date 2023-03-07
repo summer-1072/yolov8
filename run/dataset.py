@@ -7,7 +7,7 @@ import imagesize
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from box import xywh_norm2xyxy, xyxy2xywh_norm, letterbox
+from box import scale_offset, unscale_offset, letterbox
 
 
 def build_labels(input_file, output_file, image_dir, cls):
@@ -25,12 +25,12 @@ def build_labels(input_file, output_file, image_dir, cls):
                 if category in cls:
                     c = cls.index(category)
                     box2d = label['box2d']
-                    x1, y1, x2, y2 = box2d['x1'], box2d['y1'], box2d['x2'], box2d['y2']
-                    x = round((x1 + x2) / (2 * img_w), 4)
-                    y = round((y1 + y2) / (2 * img_h), 4)
-                    w = round(abs(x1 - x2) / img_w, 4)
-                    h = round(abs(y1 - y2) / img_h, 4)
-                    targets.append(','.join([str(i) for i in [c, x, y, w, h]]))
+                    x1 = round(box2d['x1'] / img_w, 4)
+                    y1 = round(box2d['y1'] / img_h, 4)
+                    x2 = round(box2d['x2'] / img_w, 4)
+                    y2 = round(box2d['y2'] / img_h, 4)
+
+                    targets.append(','.join([str(i) for i in [c, x1, y1, x2, y2]]))
 
             records.append(name + '  ' + '  '.join(targets))
 
@@ -97,7 +97,7 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
         offset_x, offset_y = x1a - x1b, y1a - y1b
         img_labels = labels[index].copy()
         if len(img_labels):
-            img_labels[:, 1:5] = xywh_norm2xyxy(img_labels[:, 1:5], w, h, offset_x, offset_y)
+            img_labels[:, 1:5] = scale_offset(img_labels[:, 1:5], w, h, offset_x, offset_y)
             img4_labels.append(img_labels)
 
     img4_labels = np.concatenate(img4_labels, 0)
@@ -169,7 +169,9 @@ def flip_up_down(img, labels):
     img = np.flipud(img)
 
     if len(labels):
-        labels[:, 2] = 1 - labels[:, 2]
+        y1, y2 = labels[:, 2], labels[:, 4]
+        labels[:, 2] = 1 - y2
+        labels[:, 4] = 1 - y1
 
     return img, labels
 
@@ -178,7 +180,9 @@ def flip_left_right(img, labels):
     img = np.fliplr(img)
 
     if len(labels):
-        labels[:, 1] = 1 - labels[:, 1]
+        x1, x2 = labels[:, 1], labels[:, 3]
+        labels[:, 1] = 1 - x2
+        labels[:, 3] = 1 - x1
 
     return img, labels
 
@@ -209,7 +213,7 @@ class LoadDataset(Dataset):
             img, ratio, (pad_w, pad_h) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
             labels = self.labels[index].copy()
             if len(labels):
-                labels[:, 1:5] = xywh_norm2xyxy(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
+                labels[:, 1:5] = scale_offset(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
 
         if self.hyp['augment'] and self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])
@@ -218,7 +222,7 @@ class LoadDataset(Dataset):
 
         num = len(labels)
         if num:
-            labels[:, 1:5] = xyxy2xywh_norm(labels[:, 1:5], img.shape[1], img.shape[0])
+            labels[:, 1:5] = unscale_offset(labels[:, 1:5], img.shape[1], img.shape[0])
 
         if self.hyp['augment'] and random.random() < self.hyp['hsv']:
             augment_hsv(img, self.hyp['h'], self.hyp['s'], self.hyp['v'])
@@ -247,3 +251,13 @@ class LoadDataset(Dataset):
 
     def __len__(self):
         return len(self.imgs)
+
+
+if __name__ == "__main__":
+    import yaml
+
+    cls = yaml.safe_load(open('../dataset/bdd100k/cls.yaml', encoding="utf-8"))
+    build_labels('../dataset/bdd100k/labels/bdd100k_labels_images_train.json',
+                 '../dataset/bdd100k/labels/train.txt', '../dataset/bdd100k/images/train', cls)
+    build_labels('../dataset/bdd100k/labels/bdd100k_labels_images_val.json',
+                 '../dataset/bdd100k/labels/val.txt', '../dataset/bdd100k/images/val', cls)

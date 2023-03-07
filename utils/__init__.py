@@ -2,7 +2,6 @@ import torch
 import math
 import numpy as np
 import torch.nn.functional as F
-from box import xyxy2xywh, xywh2xyxy
 from torch import nn
 
 

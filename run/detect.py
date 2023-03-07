@@ -40,7 +40,7 @@ def detect(args):
     half = args.half & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_file, args.weight_file, False, True)
+    model = load_model(args.model_file, False, True, args.weight_file)
     model.to(device)
     if half:
         model.half()

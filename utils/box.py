@@ -20,46 +20,28 @@ def box2gap(box, grid, reg_max, dim=-1):
     return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 1.01)
 
 
-def xywh2xyxy(box, dim=-1):
-    if isinstance(box, torch.Tensor):
-        x, y, w, h = box.chunk(4, dim)
-
-        return torch.cat((x - w / 2, y - h / 2, x + w / 2, y + h / 2), dim)
-
-    else:
-        x, y, w, h = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-
-        return np.stack((x - w / 2, y - h / 2, x + w / 2, y + h / 2), dim)
-
-
-def xyxy2xywh(box, dim=-1):
+def scale_offset(box, w, h, offset_x=0, offset_y=0, dim=-1):
     if isinstance(box, torch.Tensor):
         x1, y1, x2, y2 = box.chunk(4, dim)
 
-        return torch.cat(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), dim)
+        return torch.cat((w * x1 + offset_x, h * y1 + offset_y, w * x2 + offset_x, h * y2 + offset_y), dim)
 
     else:
         x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack(((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1), dim)
+        return np.stack((w * x1 + offset_x, h * y1 + offset_y, w * x2 + offset_x, h * y2 + offset_y), dim)
 
 
-def xywh_norm2xyxy(box, w, h, offset_x, offset_y, dim=-1):
+def unscale_offset(box, w, h, offset_x=0, offset_y=0, dim=-1):
     if isinstance(box, torch.Tensor):
-        bx, by, bw, bh = box.chunk(4, dim)
+        x1, y1, x2, y2 = box.chunk(4, dim)
 
-        return torch.cat((w * (bx - bw / 2) + offset_x,
-                          h * (by - bh / 2) + offset_y,
-                          w * (bx + bw / 2) + offset_x,
-                          h * (by + bh / 2) + offset_y), dim)
+        return torch.cat((x1 / w, y1 / h, x2 / w, y2 / h), dim)
 
     else:
-        bx, by, bw, bh = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
+        x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack((w * (bx - bw / 2) + offset_x,
-                         h * (by - bh / 2) + offset_y,
-                         w * (bx + bw / 2) + offset_x,
-                         h * (by + bh / 2) + offset_y), dim)
+        return np.stack(((x1 / 2) / w, y1 / h, x2 / w, y2 / h), dim)
 
 
 def xyxy2xywh_norm(box, w, h, dim=-1):
