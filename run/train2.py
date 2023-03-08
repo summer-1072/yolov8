@@ -17,13 +17,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 class Optim:
-    def __init__(self):
-        pass
+    def __init__(self, model, args, hyp, weight_path, start_epoch):
+        self.accumulate = max(round(args.num_batch_size / args.batch_size), 1)
+        self.optimizer = self.build_optimizer(model, hyp['optim'], hyp['lr'],
+                                              hyp['momentum'], hyp['decay'], weight_path)
 
-    def build_optimizer(self, model, batch_size, num_batch_size, decay=0.0005,
-                        optim='Adam', lr=0.01, momentum=0.937, weight_path=''):
-        accumulate = max(round(num_batch_size / batch_size), 1)
-        decay = decay * batch_size * accumulate / num_batch_size
+        self.scheduler = self.build_scheduler(self.optimizer, args.epochs, hyp['one_cycle'], hyp['lrf'], start_epoch)
+
+    def build_optimizer(self, model, optim, lr, momentum, decay, weight_path):
         params = [[], [], []]
         for v in model.modules():
             if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
@@ -52,13 +53,13 @@ class Optim:
 
         return optimizer
 
-    def build_scheduler(self, optimizer, epochs, one_cycle=False, lrf=0.01, start_epoch=0):
+    def build_scheduler(self, optimizer, epochs, one_cycle, lrf, start_epoch):
         if one_cycle:
-            lf = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
+            lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
         else:
-            lf = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
+            lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
-        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
         scheduler.last_epoch = start_epoch - 1
 
         return scheduler

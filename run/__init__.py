@@ -27,11 +27,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 epochs = 100
+warmup_epochs = 5
 
 x = [i for i in range(epochs)]
-y = [((1 - math.cos(i * math.pi / epochs)) / 2) * (0.01 - 1) + 1 for i in range(epochs)]
+
+lf = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (0.01 - 1) + 1
+y1 = [np.interp(i, [0, warmup_epochs], [0, 0.01 * lf(i)]) for i in range(epochs)]
+y2 = [((1 - math.cos(i * math.pi / epochs)) / 2) * (0.01 - 1) + 1 for i in range(epochs)]
+print(y1)
+# y = [((1 - math.cos(i * math.pi / epochs)) / 2) * (0.01 - 1) + 1 for i in range(epochs)]
 # y = [(1 - i / epochs) * (1.0 - 0.01) + 0.01 for i in range(epochs)]
 
 plt.figure()
-plt.plot(x, y)
+plt.plot(x, y1)
 plt.show()
