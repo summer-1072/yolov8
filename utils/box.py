@@ -36,24 +36,12 @@ def unscale_offset(box, w, h, offset_x=0, offset_y=0, dim=-1):
     if isinstance(box, torch.Tensor):
         x1, y1, x2, y2 = box.chunk(4, dim)
 
-        return torch.cat((x1 / w, y1 / h, x2 / w, y2 / h), dim)
+        return torch.cat((x1 / w + offset_x, y1 / h + offset_y, x2 / w + offset_x, y2 / h + offset_y), dim)
 
     else:
         x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-        return np.stack(((x1 / 2) / w, y1 / h, x2 / w, y2 / h), dim)
-
-
-def xyxy2xywh_norm(box, w, h, dim=-1):
-    if isinstance(box, torch.Tensor):
-        x1, y1, x2, y2 = box.chunk(4, dim)
-
-        return torch.cat((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
-
-    else:
-        x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-
-        return np.stack((((x1 + x2) / 2) / w, ((y1 + y2) / 2) / h, (x2 - x1) / w, (y2 - y1) / h), dim)
+        return np.stack((x1 / w + offset_x, y1 / h + offset_y, x2 / w + offset_x, y2 / h + offset_y), dim)
 
 
 def bbox_iou(box1, box2, type='IoU', eps=1e-5, dim=-1):

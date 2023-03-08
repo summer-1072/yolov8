@@ -7,6 +7,7 @@ import argparse
 from torch import nn
 from tqdm import tqdm
 from copy import deepcopy
+from torch.cuda import amp
 from tools import load_model
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
@@ -15,49 +16,52 @@ from dataset import build_labels, LoadDataset
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-def build_optimizer(model, batch_size, num_batch_size, decay=0.0005,
-                    optim='Adam', lr=0.01, momentum=0.937, weight_path=''):
-    accumulate = max(round(num_batch_size / batch_size), 1)
-    decay = decay * batch_size * accumulate / num_batch_size
-    params = [[], [], []]
-    for v in model.modules():
-        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-            params[2].append(v.bias)
-        if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
-            params[1].append(v.weight)
-        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-            params[0].append(v.weight)
+class Optim:
+    def __init__(self):
+        pass
 
-    if optim == 'Adam':
-        optimizer = torch.optim.Adam(params[2], lr=lr, betas=(momentum, 0.999))
-    elif optim == 'AdamW':
-        optimizer = torch.optim.AdamW(params[2], lr=lr, betas=(momentum, 0.999))
-    elif optim == 'RMSProp':
-        optimizer = torch.optim.RMSprop(params[2], lr=lr, momentum=momentum)
-    elif optim == 'SGD':
-        optimizer = torch.optim.SGD(params[2], lr=lr, momentum=momentum, nesterov=True)
-    else:
-        raise NotImplementedError(f'Optimizer {optim} not implemented.')
+    def build_optimizer(self, model, batch_size, num_batch_size, decay=0.0005,
+                        optim='Adam', lr=0.01, momentum=0.937, weight_path=''):
+        accumulate = max(round(num_batch_size / batch_size), 1)
+        decay = decay * batch_size * accumulate / num_batch_size
+        params = [[], [], []]
+        for v in model.modules():
+            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+                params[2].append(v.bias)
+            if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
+                params[1].append(v.weight)
+            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+                params[0].append(v.weight)
 
-    optimizer.add_param_group({'params': params[0], 'weight_decay': decay})
-    optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
+        if optim == 'Adam':
+            optimizer = torch.optim.Adam(params[2], lr=lr, betas=(momentum, 0.999))
+        elif optim == 'AdamW':
+            optimizer = torch.optim.AdamW(params[2], lr=lr, betas=(momentum, 0.999))
+        elif optim == 'RMSProp':
+            optimizer = torch.optim.RMSprop(params[2], lr=lr, momentum=momentum)
+        elif optim == 'SGD':
+            optimizer = torch.optim.SGD(params[2], lr=lr, momentum=momentum, nesterov=True)
+        else:
+            raise NotImplementedError(f'Optimizer {optim} not implemented.')
 
-    if weight_path:
-        optimizer.load_state_dict(torch.load(weight_path))
+        optimizer.add_param_group({'params': params[0], 'weight_decay': decay})
+        optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
 
-    return optimizer
+        if weight_path:
+            optimizer.load_state_dict(torch.load(weight_path))
 
+        return optimizer
 
-def build_scheduler(optimizer, epochs, one_cycle=False, lrf=0.01, start_epoch=0):
-    if one_cycle:
-        lf = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
-    else:
-        lf = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
+    def build_scheduler(self, optimizer, epochs, one_cycle=False, lrf=0.01, start_epoch=0):
+        if one_cycle:
+            lf = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
+        else:
+            lf = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
-    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
-    scheduler.last_epoch = start_epoch - 1
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
+        scheduler.last_epoch = start_epoch - 1
 
-    return scheduler
+        return scheduler
 
 
 class EMA:  # exponential moving average
@@ -119,6 +123,7 @@ class Train:
                 self.updates = resume_param['updates']
                 self.best_epoch = resume_param['best_epoch']
                 self.best_fitness = resume_param['best_fitness']
+
         else:
             self.model_weight_path = self.args.weight_path
             self.optim_weight_path = ''
