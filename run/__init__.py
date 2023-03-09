@@ -26,18 +26,29 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-epochs = 100
+epochs = 50
 warmup_epochs = 5
 
 x = [i for i in range(epochs)]
 
 lf = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (0.01 - 1) + 1
 y1 = [np.interp(i, [0, warmup_epochs], [0, 0.01 * lf(i)]) for i in range(epochs)]
-y2 = [((1 - math.cos(i * math.pi / epochs)) / 2) * (0.01 - 1) + 1 for i in range(epochs)]
-print(y1)
+y2 = [np.interp(i, [0, warmup_epochs], [0.02, 0.01 * lf(i)]) for i in range(epochs)]
 # y = [((1 - math.cos(i * math.pi / epochs)) / 2) * (0.01 - 1) + 1 for i in range(epochs)]
 # y = [(1 - i / epochs) * (1.0 - 0.01) + 0.01 for i in range(epochs)]
 
-plt.figure()
+plt.figure(figsize=(14, 6))
+plt.subplots_adjust(top=0.9, bottom=0.1, left=0.075, right=0.98, hspace=0.25, wspace=0.25)
+
+plt.subplot(1, 2, 1)
+plt.title('warm_up + cos_anneal')
+plt.xlabel('epoch')
+plt.ylabel('lr')
 plt.plot(x, y1)
+
+plt.subplot(1, 2, 2)
+plt.title('warm_down + cos_anneal')
+plt.xlabel('epoch')
+plt.ylabel('lr')
+plt.plot(x, y2)
 plt.show()
