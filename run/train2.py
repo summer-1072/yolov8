@@ -14,89 +14,54 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from plot import plot_images, plot_labels
 from dataset import build_labels, LoadDataset
-from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
-class Optim:
-    def __init__(self, model, hyp, num_batch, device):
-        self.hyp = hyp
-        self.accumulate = max(round(hyp['num_batch_size'] / hyp['batch_size']), 1)
-        self.warmup_max = max(round(hyp['warmup_epoch'] * num_batch), 100)
+def build_optimizer(model, optim, lr, momentum, decay):
+    params = [[], [], []]
+    for v in model.modules():
+        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+            params[0].append(v.bias)
+        if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
+            params[1].append(v.weight)
+        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+            params[2].append(v.weight)
 
-        self.amp = device != 'cpu'
-        self.scaler = amp.GradScaler(enabled=self.amp)
-        self.optimizer = self.build_optimizer(model, hyp['optim'], hyp['lr'], hyp['momentum'], hyp['decay'])
-        self.lr_fun, self.scheduler = self.build_scheduler(self.optimizer, hyp['epochs'], hyp['one_cycle'], hyp['lrf'])
+    if optim == 'Adam':
+        optimizer = torch.optim.Adam(params[0], lr=lr, betas=(momentum, 0.999))
+    elif optim == 'AdamW':
+        optimizer = torch.optim.AdamW(params[0], lr=lr, betas=(momentum, 0.999))
+    elif optim == 'RMSProp':
+        optimizer = torch.optim.RMSprop(params[0], lr=lr, momentum=momentum)
+    elif optim == 'SGD':
+        optimizer = torch.optim.SGD(params[0], lr=lr, momentum=momentum, nesterov=True)
+    else:
+        raise NotImplementedError(f'Optimizer {optim} not implemented.')
 
-    def build_optimizer(self, model, optim, lr, momentum, decay):
-        params = [[], [], []]
-        for v in model.modules():
-            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-                params[2].append(v.bias)
-            if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
-                params[1].append(v.weight)
-            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-                params[0].append(v.weight)
+    optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
+    optimizer.add_param_group({'params': params[2], 'weight_decay': decay})
 
-        if optim == 'Adam':
-            optimizer = torch.optim.Adam(params[2], lr=lr, betas=(momentum, 0.999))
-        elif optim == 'AdamW':
-            optimizer = torch.optim.AdamW(params[2], lr=lr, betas=(momentum, 0.999))
-        elif optim == 'RMSProp':
-            optimizer = torch.optim.RMSprop(params[2], lr=lr, momentum=momentum)
-        elif optim == 'SGD':
-            optimizer = torch.optim.SGD(params[2], lr=lr, momentum=momentum, nesterov=True)
-        else:
-            raise NotImplementedError(f'Optimizer {optim} not implemented.')
+    return optimizer
 
-        optimizer.add_param_group({'params': params[0], 'weight_decay': decay})
-        optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
 
-        return optimizer
+def build_scheduler(optimizer, epochs, one_cycle, lrf):
+    if one_cycle:
+        lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
+    else:
+        lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
-    def build_scheduler(self, optimizer, epochs, one_cycle, lrf):
-        if one_cycle:
-            lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
-        else:
-            lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
 
-        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
-
-        return lr_fun, scheduler
-
-    def warm_up(self, count, epoch):
-        if count < self.warmup_max:
-            self.accumulate = max(1, np.interp(count, [0, self.warmup_max],
-                                               [1, self.hyp['num_batch_size'] / self.hyp['batch_size']]).round())
-
-            for i, param in enumerate(self.optimizer.param_groups):
-                # bias lr falls from 0.1 to lr, weight lr rise from 0.0 to lr
-                param['lr'] = np.interp(count, [0, self.warmup_max],
-                                        [self.hyp['warmup_bias_lr'] if i == 0 else 0.0,
-                                         param['initial_lr'] * self.lr_fun(epoch)])
-                if 'momentum' in param:
-                    param['momentum'] = np.interp(count, [0, self.warmup_max],
-                                                  [self.hyp['warmup_momentum'], self.hyp['momentum']])
-
-    def optimizer_step(self, model):
-        self.scaler.unscale_(self.optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)  # clip gradients
-        self.scaler.step(self.optimizer)
-        self.scaler.update()
-        self.optimizer.zero_grad()
-
-    def scheduler_step(self):
-        self.scheduler.step()
+    return lr_fun, scheduler
 
 
 class EMA:  # exponential moving average
-    def __int__(self, model, decay=0.9999, tau=2000, updates=0):
+    def __int__(self, model, decay=0.9999, tau=2000):
+        self.updates = 0
         self.model = deepcopy(model).eval()
         for param in self.model.parameters():
             param.requires_grad_(False)
 
         self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
-        self.updates = updates
 
     def update(self, model):
         self.updates += 1
@@ -108,9 +73,9 @@ class EMA:  # exponential moving average
 
 
 class EarlyStop:
-    def __init__(self, best_epoch=0, best_fitness=0.0, patience=50):
-        self.best_epoch = best_epoch
-        self.best_fitness = best_fitness
+    def __init__(self, patience=50):
+        self.best_epoch = 0
+        self.best_fitness = 0.0
         self.patience = patience or float('inf')
 
     def __call__(self, epoch, fitness):
@@ -134,25 +99,37 @@ class Train:
 
     def setup_train(self):
         # model
-        self.model = load_model(self.args.model_path, self.args.training, self.args.fused, self.model_weight_path)
+        self.model = load_model(self.args.model_path, self.args.training, self.args.fused, self.args.weight_path)
         self.model.to(self.device)
 
+        # optimizer
+        self.optimizer = build_optimizer(self.model, self.hyp['optim'], self.hyp['lr'], self.hyp['momentum'],
+                                         self.hyp['decay'])
+
+        # scheduler
+        self.lr_fun, self.scheduler = build_scheduler(self.optimizer, self.hyp['epochs'], self.hyp['one_cycle'],
+                                                      self.hyp['lrf'])
+
         # ema
-        self.ema = EMA(self.model, self.hyp['decay'], self.hyp['tau'], self.updates)
+        self.ema = EMA(self.model, self.hyp['decay'], self.hyp['tau'])
 
         # early stop
-        self.stopper, self.stop = EarlyStop(self.best_epoch, self.best_fitness, self.args.patience), False
+        self.stopper, self.stop = EarlyStop(self.hyp['patience']), False
 
         # dataset
-        train_dataset = LoadDataset(self.args.train_img_dir, self.args.train_label_file, self.hyp)
+        train_dataset = LoadDataset(self.args.train_img_dir, self.args.train_label_file, self.hyp, True)
         self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=self.args.batch_size,
                                            num_workers=self.args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
 
-    def resume_train(self):
+        val_dataset = LoadDataset(self.args.val_img_dir, self.args.val_label_file, self.hyp, False)
+        self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=self.args.batch_size,
+                                         num_workers=self.args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
+
+    def resume_train(self, log_dir):
         pass
 
     def exec_train(self):
-        self.setup_train()
+        pass
 
 
 parser = argparse.ArgumentParser()

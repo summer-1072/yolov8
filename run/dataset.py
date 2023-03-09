@@ -198,13 +198,14 @@ def check_labels(labels, box_t, wh_rt, eps=1e-3):
 
 
 class LoadDataset(Dataset):
-    def __init__(self, img_dir, label_file, hyp):
+    def __init__(self, img_dir, label_file, hyp, augment):
         self.img_dir = img_dir
         self.hyp = hyp
+        self.augment = augment
         self.indices, self.imgs, self.labels = read_labels(label_file)
 
     def __getitem__(self, index):
-        if self.hyp['augment'] and self.hyp['mosaic']:
+        if self.augment and self.hyp['mosaic']:
             img, labels = mosaic(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
 
         else:
@@ -215,7 +216,7 @@ class LoadDataset(Dataset):
             if len(labels):
                 labels[:, 1:5] = scale_offset(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
 
-        if self.hyp['augment'] and self.hyp['affine']:
+        if self.augment and self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])
 
         labels = check_labels(labels, self.hyp['box_t'], self.hyp['wh_rt'])
@@ -224,13 +225,13 @@ class LoadDataset(Dataset):
         if num:
             labels[:, 1:5] = unscale_offset(labels[:, 1:5], img.shape[1], img.shape[0])
 
-        if self.hyp['augment'] and random.random() < self.hyp['hsv']:
+        if self.augment and random.random() < self.hyp['hsv']:
             augment_hsv(img, self.hyp['h'], self.hyp['s'], self.hyp['v'])
 
-        if self.hyp['augment'] and random.random() < self.hyp['flipud']:
+        if self.augment and random.random() < self.hyp['flipud']:
             img, labels = flip_up_down(img, labels)
 
-        if self.hyp['augment'] and random.random() < self.hyp['fliplr']:
+        if self.augment and random.random() < self.hyp['fliplr']:
             img, labels = flip_left_right(img, labels)
 
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB

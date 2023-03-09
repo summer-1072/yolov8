@@ -4,6 +4,7 @@ import json
 import math
 import torch
 import argparse
+import numpy as np
 from torch import nn
 from tqdm import tqdm
 from copy import deepcopy
@@ -17,15 +18,17 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 
 class Optim:
-    def __init__(self, model, args, hyp):
-        self.accumulate = max(round(args.num_batch_size / args.batch_size), 1)
-        self.optimizer = self.build_optimizer(model, hyp['optim'], hyp['lr'],
-                                              hyp['momentum'], hyp['decay'], args.weight_path)
+    def __init__(self, model, hyp, num_batch, device):
+        self.hyp = hyp
+        self.accumulate = max(round(hyp['num_batch_size'] / hyp['batch_size']), 1)
+        self.warmup_max = max(round(hyp['warmup_epoch'] * num_batch), 100)
 
-        self.scheduler = self.build_scheduler(self.optimizer, args.epochs, hyp['one_cycle'], hyp['lrf'],
-                                              args.start_epoch)
+        self.amp = device != 'cpu'
+        self.scaler = amp.GradScaler(enabled=self.amp)
+        self.optimizer = self.build_optimizer(model, hyp['optim'], hyp['lr'], hyp['momentum'], hyp['decay'])
+        self.lr_fun, self.scheduler = self.build_scheduler(self.optimizer, hyp['epochs'], hyp['one_cycle'], hyp['lrf'])
 
-    def build_optimizer(self, model, optim, lr, momentum, decay, weight_path):
+    def build_optimizer(self, model, optim, lr, momentum, decay):
         params = [[], [], []]
         for v in model.modules():
             if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
@@ -49,31 +52,48 @@ class Optim:
         optimizer.add_param_group({'params': params[0], 'weight_decay': decay})
         optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
 
-        if weight_path:
-            optimizer.load_state_dict(torch.load(weight_path))
-
         return optimizer
 
-    def build_scheduler(self, optimizer, epochs, one_cycle, lrf, start_epoch):
+    def build_scheduler(self, optimizer, epochs, one_cycle, lrf):
         if one_cycle:
             lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
         else:
             lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
-        scheduler.last_epoch = start_epoch - 1
 
-        return scheduler
+        return lr_fun, scheduler
+
+    def warm_up(self, count, epoch):
+        if count < self.warmup_max:
+            self.accumulate = max(1, np.interp(count, [0, self.warmup_max],
+                                               [1, self.hyp['num_batch_size'] / self.hyp['batch_size']]).round())
+
+            for i, param in enumerate(self.optimizer.param_groups):
+                # bias lr falls from 0.1 to lr, weight lr rise from 0.0 to lr
+                param['lr'] = np.interp(count, [0, self.warmup_max],
+                                        [self.hyp['warmup_bias_lr'] if i == 0 else 0.0,
+                                         param['initial_lr'] * self.lr_fun(epoch)])
+                if 'momentum' in param:
+                    param['momentum'] = np.interp(count, [0, self.warmup_max],
+                                                  [self.hyp['warmup_momentum'], self.hyp['momentum']])
+
+    def optimizer_step(self, model):
+        self.scaler.unscale_(self.optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)  # clip gradients
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
+        self.optimizer.zero_grad()
+
+    def scheduler_step(self):
+        self.scheduler.step()
 
 
 class EMA:  # exponential moving average
-    def __int__(self, model, decay=0.9999, tau=2000, updates=0, weight_path=''):
+    def __int__(self, model, decay=0.9999, tau=2000, updates=0):
         self.model = deepcopy(model).eval()
         for param in self.model.parameters():
             param.requires_grad_(False)
-
-        if weight_path:
-            self.model.load_state_dict(torch.load(weight_path)['model'])
 
         self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
         self.updates = updates
@@ -112,44 +132,13 @@ class Train:
         self.hyp = hyp
         self.device = device
 
-        # resume train
-        if args.resume_log_dir:
-            self.model_weight_path = os.path.join(args.resume_log_dir, 'weight', 'model.pth')
-            self.optim_weight_path = os.path.join(args.resume_log_dir, 'weight', 'optim.pth')
-            self.ema_weight_path = os.path.join(args.resume_log_dir, 'weight', 'ema.pth')
-
-            param_path = os.path.join(args.resume_log_dir, 'param.json')
-            with open(param_path) as f:
-                resume_param = json.load(f)
-                self.start_epoch = resume_param['epoch']
-                self.updates = resume_param['updates']
-                self.best_epoch = resume_param['best_epoch']
-                self.best_fitness = resume_param['best_fitness']
-
-        else:
-            self.model_weight_path = self.args.weight_path
-            self.optim_weight_path = ''
-            self.ema_weight_path = ''
-            self.start_epoch = 0
-            self.updates = 0
-            self.best_epoch = 0
-            self.best_fitness = 0.0
-
     def setup_train(self):
         # model
         self.model = load_model(self.args.model_path, self.args.training, self.args.fused, self.model_weight_path)
         self.model.to(self.device)
 
-        # optimizer
-        self.optimizer = build_optimizer(self.model, self.args.batch_size, self.args.num_batch_size, self.args.decay,
-                                         self.args.optim, self.args.lr, self.args.momentum, self.optim_weight_path)
-
-        # scheduler
-        self.scheduler = build_scheduler(self.optimizer, self.args.one_cycle,
-                                         self.args.epochs, self.args.lrf, self.start_epoch)
-
         # ema
-        self.ema = EMA(self.model, self.hyp['decay'], self.hyp['tau'], self.updates, self.ema_weight_path)
+        self.ema = EMA(self.model, self.hyp['decay'], self.hyp['tau'], self.updates)
 
         # early stop
         self.stopper, self.stop = EarlyStop(self.best_epoch, self.best_fitness, self.args.patience), False
@@ -158,6 +147,9 @@ class Train:
         train_dataset = LoadDataset(self.args.train_img_dir, self.args.train_label_file, self.hyp)
         self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=self.args.batch_size,
                                            num_workers=self.args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
+
+    def resume_train(self):
+        pass
 
     def exec_train(self):
         self.setup_train()
