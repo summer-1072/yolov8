@@ -16,52 +16,17 @@ from plot import plot_images, plot_labels
 from dataset import build_labels, LoadDataset
 
 
-def build_optimizer(model, optim, lr, momentum, decay):
-    params = [[], [], []]
-    for v in model.modules():
-        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-            params[0].append(v.bias)
-        if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
-            params[1].append(v.weight)
-        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-            params[2].append(v.weight)
-
-    if optim == 'Adam':
-        optimizer = torch.optim.Adam(params[0], lr=lr, betas=(momentum, 0.999))
-    elif optim == 'AdamW':
-        optimizer = torch.optim.AdamW(params[0], lr=lr, betas=(momentum, 0.999))
-    elif optim == 'RMSProp':
-        optimizer = torch.optim.RMSprop(params[0], lr=lr, momentum=momentum)
-    elif optim == 'SGD':
-        optimizer = torch.optim.SGD(params[0], lr=lr, momentum=momentum, nesterov=True)
-    else:
-        raise NotImplementedError(f'Optimizer {optim} not implemented.')
-
-    optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
-    optimizer.add_param_group({'params': params[2], 'weight_decay': decay})
-
-    return optimizer
-
-
-def build_scheduler(optimizer, epochs, one_cycle, lrf):
-    if one_cycle:
-        lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
-    else:
-        lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
-
-    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
-
-    return lr_fun, scheduler
-
-
-class EMA:  # exponential moving average
-    def __int__(self, model, decay=0.9999, tau=2000):
-        self.updates = 0
+class EMAModel:  # exponential moving average
+    def __int__(self, model, decay, tau, updates, weight_path):
         self.model = deepcopy(model).eval()
+        if weight_path:
+            self.model.load_state_dict(weight_path)
+
         for param in self.model.parameters():
             param.requires_grad_(False)
 
         self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
+        self.updates = updates
 
     def update(self, model):
         self.updates += 1
@@ -73,9 +38,9 @@ class EMA:  # exponential moving average
 
 
 class EarlyStop:
-    def __init__(self, patience=50):
-        self.best_epoch = 0
-        self.best_fitness = 0.0
+    def __init__(self, best_epoch, best_fitness, patience=50):
+        self.best_epoch = best_epoch
+        self.best_fitness = best_fitness
         self.patience = patience or float('inf')
 
     def __call__(self, epoch, fitness):
@@ -93,28 +58,38 @@ class EarlyStop:
 
 class Train:
     def __int__(self, args, hyp, device):
-        self.args = args
-        self.hyp = hyp
-        self.device = device
+        # check resume
+        if args.log_dir:
+            with open(os.path.join(args.log_dir, 'train.json')) as f:
+                param = json.load(f)
 
-    def setup_train(self):
+        model_weight = os.path.join(args.log_dir, 'weight', 'model.pth') if args.log_dir else args.weight_path
+        optim_weight = os.path.join(args.log_dir, 'weight', 'optim.pth') if args.log_dir else ''
+        ema_weight = os.path.join(args.log_dir, 'weight', 'ema.pth') if args.log_dir else ''
+        start_epoch = param['start_epoch'] if args.log_dir else 0
+        best_epoch = param['best_epoch'] if args.log_dir else 0
+        best_fitness = param['best_fitness'] if args.log_dir else 0.0
+        updates = param['updates'] if args.log_dir else 0
+
         # model
-        self.model = load_model(self.args.model_path, self.args.training, self.args.fused, self.args.weight_path)
-        self.model.to(self.device)
+        self.model = load_model(args.model_path, True, args.fused, model_weight)
+        self.model.to(device)
 
         # optimizer
-        self.optimizer = build_optimizer(self.model, self.hyp['optim'], self.hyp['lr'], self.hyp['momentum'],
-                                         self.hyp['decay'])
+        self.optimizer = self.build_optimizer(hyp['optim'], hyp['lr'], hyp['momentum'], hyp['decay'], optim_weight)
 
         # scheduler
-        self.lr_fun, self.scheduler = build_scheduler(self.optimizer, self.hyp['epochs'], self.hyp['one_cycle'],
-                                                      self.hyp['lrf'])
+        self.lr_fun, self.scheduler = self.build_scheduler(hyp['one_cycle'], hyp['epochs'], hyp['lrf'], start_epoch)
 
-        # ema
-        self.ema = EMA(self.model, self.hyp['decay'], self.hyp['tau'])
+        # ema model
+        self.ema_model = EMAModel(self.model, hyp['decay'], hyp['tau'], updates, ema_weight)
 
         # early stop
-        self.stopper, self.stop = EarlyStop(self.hyp['patience']), False
+        self.stopper = EarlyStop(best_epoch, best_fitness, hyp['patience'])
+
+        # auto mixed precision
+        self.amp = device != 'cpu'
+        self.scaler = amp.GradScaler(enabled=self.amp)
 
         # dataset
         train_dataset = LoadDataset(self.args.train_img_dir, self.args.train_label_file, self.hyp, True)
@@ -125,11 +100,55 @@ class Train:
         self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=self.args.batch_size,
                                          num_workers=self.args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
 
-    def resume_train(self, log_dir):
-        pass
+        # other param
+        self.epochs = hyp['epochs']
+        self.start_epoch = start_epoch
+        self.accumulate = max(round(hyp['num_batch_size'] / hyp['batch_size']), 1)
+        self.warmup_max = max(round(hyp['warmup_epoch'] * len(self.train_dataloader)), 100)
+
+    def build_optimizer(self, optim, lr, momentum, decay, weight_path):
+        params = [[], [], []]
+        for v in self.model.modules():
+            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+                params[0].append(v.bias)
+            if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
+                params[1].append(v.weight)
+            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+                params[2].append(v.weight)
+
+        if optim == 'Adam':
+            optimizer = torch.optim.Adam(params[0], lr=lr, betas=(momentum, 0.999))
+        elif optim == 'AdamW':
+            optimizer = torch.optim.AdamW(params[0], lr=lr, betas=(momentum, 0.999))
+        elif optim == 'RMSProp':
+            optimizer = torch.optim.RMSprop(params[0], lr=lr, momentum=momentum)
+        elif optim == 'SGD':
+            optimizer = torch.optim.SGD(params[0], lr=lr, momentum=momentum, nesterov=True)
+        else:
+            raise NotImplementedError(f'Optimizer {optim} not implemented.')
+
+        optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
+        optimizer.add_param_group({'params': params[2], 'weight_decay': decay})
+
+        if weight_path:
+            optimizer.load_state_dict(weight_path)
+
+        return optimizer
+
+    def build_scheduler(self, one_cycle, epochs, lrf, start_epoch):
+        if one_cycle:
+            lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
+        else:
+            lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
+
+        scheduler = lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_fun)
+
+        scheduler.last_epoch = start_epoch - 1
+
+        return lr_fun, scheduler
 
     def exec_train(self):
-        pass
+        for epoch in
 
 
 parser = argparse.ArgumentParser()
