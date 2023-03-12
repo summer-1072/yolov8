@@ -31,7 +31,7 @@ def transform_weight(model, pretrain):
     model.load_state_dict(model_dict)
 
 
-def load_weight(model, weight_path, training, fused):
+def load_weight(model, weight_path, fused, training):
     weight_dict = torch.load(weight_path)['model']
 
     if fused:
@@ -62,12 +62,12 @@ def load_weight(model, weight_path, training, fused):
         model.load_state_dict(weight_dict)
 
 
-def load_model(model_path, training, fused, weight_path=None):
+def load_model(model_path, fused, weight_path, training):
     args = yaml.safe_load(open(model_path, encoding="utf-8"))
     model = YOLO(args['param'], args['reg_max'], args['chs'], args['strides'], args['num_cls'], training)
 
     if weight_path:
-        load_weight(model, weight_path, training, fused)
+        load_weight(model, weight_path, fused, training)
 
     return model
 

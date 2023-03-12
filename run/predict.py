@@ -40,7 +40,7 @@ def detect(args):
     half = args.half & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_file, False, True, args.weight_file)
+    model = load_model(args.model_file, args.fused, args.weight_file, False)
     model.to(device)
     if half:
         model.half()
@@ -69,7 +69,7 @@ def detect(args):
         img1 = np.ascontiguousarray(img1)
         img1 = img1 / 255
         img1 = torch.from_numpy(img1)
-        img1 = img1.to(torch.float16) if half else img1.to(torch.float32)
+        img1 = img1.half() if half else img1.float()
         img1 = img1.unsqueeze(0)
         img1 = img1.to(device)
 
@@ -106,9 +106,10 @@ parser.add_argument('--img_dir', type=str, default='../dataset/coco/images')
 parser.add_argument('--cls_file', type=str, default='../dataset/coco/cls.yaml')
 parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
 parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')
+parser.add_argument('--fused', type=bool, default=True)
 parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--log_dir', type=str, default='../log/detect')
-parser.add_argument('--half', type=bool, default=False)
+parser.add_argument('--half', type=bool, default=True)
 args = parser.parse_args()
 
 detect(args)

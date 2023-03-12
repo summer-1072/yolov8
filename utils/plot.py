@@ -3,7 +3,7 @@ import math
 import torch
 import numpy as np
 from util import color
-from box import xywh_norm2xyxy
+from box import scale_offset
 from collections import Counter
 import matplotlib.pyplot as plt
 
@@ -22,7 +22,7 @@ def plot_images(imgs, labels, save_file, max_shape=(2880, 3840), max_subplots=16
     B = min(B, max_subplots)
     num = np.ceil(B ** 0.5)
 
-    labels[:, 2:6] = xywh_norm2xyxy(labels[:, 2:6], W, H, 0, 0)
+    labels[:, 2:6] = scale_offset(labels[:, 2:6],  W, H)
 
     img_mosaic = np.full((int(num * H), int(num * W), 3), 0, dtype=np.uint8)
     for index, img in enumerate(imgs):
