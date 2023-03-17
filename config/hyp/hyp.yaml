@@ -11,7 +11,6 @@ max_det: 300
 merge: False
 
 # 图像增强
-augment: True # 是否采用图像增强
 mosaic: True # 是否采用Mosaic
 affine: True # 是否采用仿射变换
 hsv: 0.5 # 随机HSV增强

@@ -20,30 +20,6 @@ def box2gap(box, grid, reg_max, dim=-1):
     return torch.cat((x - left, y - top, right - x, bottom - y), dim).clamp(0, reg_max - 1.01)
 
 
-def scale_offset(box, w, h, offset_x=0, offset_y=0, dim=-1):
-    if isinstance(box, torch.Tensor):
-        x1, y1, x2, y2 = box.chunk(4, dim)
-
-        return torch.cat((w * x1 + offset_x, h * y1 + offset_y, w * x2 + offset_x, h * y2 + offset_y), dim)
-
-    else:
-        x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-
-        return np.stack((w * x1 + offset_x, h * y1 + offset_y, w * x2 + offset_x, h * y2 + offset_y), dim)
-
-
-def unscale_offset(box, w, h, offset_x=0, offset_y=0, dim=-1):
-    if isinstance(box, torch.Tensor):
-        x1, y1, x2, y2 = box.chunk(4, dim)
-
-        return torch.cat((x1 / w + offset_x, y1 / h + offset_y, x2 / w + offset_x, y2 / h + offset_y), dim)
-
-    else:
-        x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-
-        return np.stack((x1 / w + offset_x, y1 / h + offset_y, x2 / w + offset_x, y2 / h + offset_y), dim)
-
-
 def bbox_iou(box1, box2, type='IoU', eps=1e-5, dim=-1):
     b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, dim)
     b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, dim)
@@ -84,21 +60,26 @@ def bbox_iou(box1, box2, type='IoU', eps=1e-5, dim=-1):
 
 
 def letterbox(img, new_shape, stride):
-    # scale image
     shape = img.shape[:2]
     ratio = min(min(new_shape[0] / shape[0], new_shape[1] / shape[1]), 1)
 
     unpad_shape = int(round(shape[1] * ratio)), int(round(shape[0] * ratio))
-    dW, dH = ((new_shape[1] - unpad_shape[0]) % stride) / 2, ((new_shape[0] - unpad_shape[1]) % stride) / 2
+    dx, dy = ((new_shape[1] - unpad_shape[0]) % stride) / 2, ((new_shape[0] - unpad_shape[1]) % stride) / 2
 
     if shape[::-1] != unpad_shape:
         img = cv2.resize(img, unpad_shape, cv2.INTER_LINEAR)
 
-    top, bottom = int(round(dH - 0.1)), int(round(dH + 0.1))
-    left, right = int(round(dW - 0.1)), int(round(dW + 0.1))
+    top, bottom = int(round(dy - 0.1)), int(round(dy + 0.1))
+    left, right = int(round(dx - 0.1)), int(round(dx + 0.1))
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
 
-    return img, ratio, (dW, dH)
+    return img, img.shape[:2], (dy, dx)
+
+
+def scale_box(box, h, w, dy, dx, dim=-1):
+    x1, y1, x2, y2 = box.chunk(4, dim)
+
+    return torch.cat((w * x1 + dx, h * y1 + dy, w * x2 + dx, h * y2 + dy), dim)
 
 
 def rescale_box(shape0, shape1, box):

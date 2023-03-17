@@ -122,20 +122,15 @@ class Loss:
 
         return mask_pos, mask_pos_max, mask_pos_sum
 
-    def build_targets(self, labels, pred_box, pred_cls, grid, grid_stride, img_size):
+    def build_targets(self, labels, pred_box, pred_cls, grid, grid_stride):
         # process label
         label_cls, label_box, mask = self.preprocess(labels, pred_cls.shape[0])
 
-        # scale data
-        scale_label_box = label_box * torch.tensor(img_size)[[1, 0, 1, 0]]
-        scale_pred_box = pred_box * grid_stride
-        scale_grid = grid * grid_stride
-
         # compute metric
-        cls, iou, metric = self.build_metrics(scale_label_box, label_cls, scale_pred_box, pred_cls)
+        cls, iou, metric = self.build_metrics(label_box, label_cls, pred_box * grid_stride, pred_cls)
 
         # compute mask pos
-        mask_pos, mask_pos_max, mask_pos_sum = self.build_mask_pos(scale_label_box, scale_grid, mask, iou, metric)
+        mask_pos, mask_pos_max, mask_pos_sum = self.build_mask_pos(label_box, grid * grid_stride, mask, iou, metric)
 
         # update metric
         metric = metric * mask_pos
@@ -150,7 +145,7 @@ class Loss:
         mask_pos_max = mask_pos_max + batch_index * T
 
         # compute target box
-        target_box = scale_label_box.view(-1, 4)[mask_pos_max] / grid_stride
+        target_box = label_box.view(-1, 4)[mask_pos_max] / grid_stride
 
         # compute target score
         target_cls = label_cls.squeeze(2).flatten()[mask_pos_max].to(torch.int64)
@@ -165,12 +160,11 @@ class Loss:
 
         return target_box, target_score, target_gap, mask_pos_sum.bool()
 
-    def __call__(self, labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size):
+    def __call__(self, labels, pred_box, pred_cls, pred_dist, grid, grid_stride):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
         target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box.detach(),
-                                                                            pred_cls.detach(), grid,
-                                                                            grid_stride, img_size)
+                                                                            pred_cls.detach(), grid, grid_stride)
 
         score_sum = max(target_score.sum(), 1)
 
@@ -186,11 +180,11 @@ class Loss:
 
 if __name__ == "__main__":
     labels = torch.tensor([
-        [0, 0, 0.1, 0.1, 0.6, 0.6],
-        [0, 1, 0.4, 0.4, 0.9, 0.9],
-        [1, 0, 0.1, 0.4, 0.3, 0.6],
-        [1, 1, 0.4, 0.1, 0.9, 0.5],
-        [1, 2, 0.1, 0.7, 0.9, 0.9]])
+        [0, 0, 1.2, 1.2, 7.2, 7.2],
+        [0, 1, 4.8, 4.8, 10.8, 10.8],
+        [1, 0, 1.2, 4.8, 3.6, 7.2],
+        [1, 1, 4.8, 1.2, 10.8, 6],
+        [1, 2, 1.2, 8.4, 10.8, 10.8]])
 
     pred_box = torch.tensor([
         [[0.05, 0.05, 1.05, 1.05], [1.05, 0.05, 2.05, 1.05], [2.05, 0.05, 3.05, 1.05],
@@ -255,10 +249,7 @@ if __name__ == "__main__":
 
     grid_stride = torch.tensor([[4], [4], [4], [4], [4], [4], [4], [4], [4], [6], [6], [6], [6]])
 
-    img_size = [12, 12]
-
     loss = Loss(1, 1, 3, 3, 1, 1, 1, 'cpu')
-    l1, l2 = loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride, img_size)
+    l1, l2 = loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
 
-    print(l1)
     print(l2)

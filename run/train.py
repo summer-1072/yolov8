@@ -50,7 +50,7 @@ class EarlyStop:
         return stop
 
 
-class Trainer:
+class Train:
     def __int__(self, args, hyp):
         device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
@@ -210,7 +210,7 @@ class Trainer:
                     pred_box, pred_cls, pred_dist, grid, grid_stride = self.model(imgs)
 
                     loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist,
-                                                 grid, grid_stride, self.hyp['img_size'])
+                                                 grid, grid_stride, self.hyp['shape'])
 
                     record_loss = (record_loss * index + loss_items) / (index + 1) if record_loss != -1 else loss_items
 
@@ -234,7 +234,7 @@ class Trainer:
                 memory = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
                 pbar.set_description(
                     ('%12s' * (4 + record_loss.shape[0])) %
-                    (f'{epoch + 1}/{self.args.epochs}', memory, *record_loss, labels.shape[0], self.hyp['img_size']))
+                    (f'{epoch + 1}/{self.args.epochs}', memory, *record_loss, labels.shape[0], self.hyp['shape']))
 
             # scheduler step
             self.scheduler.step()

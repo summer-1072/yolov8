@@ -1,3 +1,4 @@
+import os
 import cv2
 import json
 import math
@@ -7,7 +8,7 @@ import imagesize
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
-from box import scale_offset, unscale_offset, letterbox
+from box import letterbox, scale_box
 
 
 def build_labels(input_file, output_file, image_dir, cls):
@@ -54,16 +55,6 @@ def read_labels(file):
     return indices, imgs, labels
 
 
-def load_image(file, size):
-    img = cv2.imread(file)
-    h, w = img.shape[:2]
-    ratio = size / max(h, w)
-    if ratio != 1:
-        img = cv2.resize(img, (math.ceil(w * ratio), math.ceil(h * ratio)), cv2.INTER_LINEAR)
-
-    return img, img.shape[:2]
-
-
 def mosaic(index, indices, img_dir, imgs, labels, new_shape):
     c_x = int(random.uniform(new_shape[1] // 2, 2 * new_shape[1] - new_shape[1] // 2))
     c_y = int(random.uniform(new_shape[0] // 2, 2 * new_shape[0] - new_shape[0] // 2))
@@ -74,10 +65,15 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
     img4 = np.full((new_shape[0] * 2, new_shape[1] * 2, 3), 114, dtype=np.uint8)
     img4_labels = []
     for (i, index) in enumerate(t_indices):
-        img_file = img_dir + '/' + imgs[index]
+        # load img
+        img = cv2.imread(os.path.join(img_dir, imgs[index]))
+        h, w = img.shape[:2]
+        ratio = max(new_shape[0] / h, new_shape[1] / w)
+        if ratio != 1:
+            img = cv2.resize(img, (math.ceil(w * ratio), math.ceil(h * ratio)), cv2.INTER_LINEAR)
+        h, w = img.shape[:2]
 
-        img, (h, w) = load_image(img_file, max(new_shape))
-
+        # mosaic img
         if i == 0:
             x1a, y1a, x2a, y2a = max(c_x - w, 0), max(c_y - h, 0), c_x, c_y
             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h
@@ -93,11 +89,11 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
 
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]
 
-        # labels
-        offset_x, offset_y = x1a - x1b, y1a - y1b
+        # mosaic labels
+        dy, dx = y1a - y1b, x1a - x1b
         img_labels = labels[index].copy()
         if len(img_labels):
-            img_labels[:, 1:5] = scale_offset(img_labels[:, 1:5], w, h, offset_x, offset_y)
+            img_labels[:, 1:5] = scale_box(img_labels[:, 1:5], h, w, dy, dx)
             img4_labels.append(img_labels)
 
     img4_labels = np.concatenate(img4_labels, 0)
@@ -167,22 +163,24 @@ def augment_hsv(img, h, s, v):
 
 def flip_up_down(img, labels):
     img = np.flipud(img)
+    h, w = img.shape[:2]
 
     if len(labels):
         y1, y2 = labels[:, 2], labels[:, 4]
-        labels[:, 2] = 1 - y2
-        labels[:, 4] = 1 - y1
+        labels[:, 2] = h - y2
+        labels[:, 4] = h - y1
 
     return img, labels
 
 
 def flip_left_right(img, labels):
     img = np.fliplr(img)
+    h, w = img.shape[:2]
 
     if len(labels):
         x1, x2 = labels[:, 1], labels[:, 3]
-        labels[:, 1] = 1 - x2
-        labels[:, 3] = 1 - x1
+        labels[:, 1] = w - x2
+        labels[:, 3] = w - x1
 
     return img, labels
 
@@ -205,25 +203,24 @@ class LoadDataset(Dataset):
         self.indices, self.imgs, self.labels = read_labels(label_file)
 
     def __getitem__(self, index):
+        img_size = []
         if self.augment and self.hyp['mosaic']:
             img, labels = mosaic(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
+            img_size = [None, None]
 
         else:
-            img_file = self.img_dir + '/' + self.imgs[index]
-            img, (h, w) = load_image(img_file, max(self.hyp['shape']))
-            img, ratio, (pad_w, pad_h) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
+            img = cv2.imread(os.path.join(self.img_dir, self.imgs[index]))
+            img_size[0] = img.shape[:2]
+            img, (h, w), (dy, dx) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
+            img_size[1] = img.shape[:2]
             labels = self.labels[index].copy()
             if len(labels):
-                labels[:, 1:5] = scale_offset(labels[:, 1:5], ratio * w, ratio * h, pad_w, pad_h)
+                labels[:, 1:5] = scale_box(labels[:, 1:5], h, w, dy, dx)
 
         if self.augment and self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])
 
         labels = check_labels(labels, self.hyp['box_t'], self.hyp['wh_rt'])
-
-        num = len(labels)
-        if num:
-            labels[:, 1:5] = unscale_offset(labels[:, 1:5], img.shape[1], img.shape[0])
 
         if self.augment and random.random() < self.hyp['hsv']:
             augment_hsv(img, self.hyp['h'], self.hyp['s'], self.hyp['v'])
@@ -238,17 +235,17 @@ class LoadDataset(Dataset):
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img)
 
-        labels = torch.from_numpy(np.insert(labels, 0, 0, 1)) if num else torch.zeros((num, 6))
+        labels = torch.from_numpy(np.insert(labels, 0, 0, 1)) if len(labels) else torch.zeros((len(labels), 6))
 
-        return img, labels
+        return img, img_size, labels
 
     @staticmethod
     def collate_fn(batch):
-        img, labels = zip(*batch)
+        imgs, img_sizes, labels = zip(*batch)
         for index, label in enumerate(labels):
             label[:, 0] = index
 
-        return torch.stack(img, 0), torch.cat(labels, 0)
+        return torch.stack(imgs, 0), torch.cat(labels, 0), tuple(img_sizes)
 
     def __len__(self):
         return len(self.imgs)
