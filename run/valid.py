@@ -88,15 +88,15 @@ if __name__ == "__main__":
     ])
 
     pred_cls = torch.tensor([
-        [[0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1]],
+        [[0.5, 0.1, 0.1], [0.5, 0.1, 0.1], [0.1, 0.1, 0.1],
+         [0.5, 0.1, 0.1], [0.5, 0.2, 0.1], [0.1, 0.5, 0.1],
+         [0.1, 0.1, 0.1], [0.1, 0.5, 0.1], [0.1, 0.5, 0.1],
+         [0.5, 0.1, 0.1], [0.1, 0.1, 0.1], [0.1, 0.1, 0.1], [0.1, 0.5, 0.1]],
 
-        [[0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1],
-         [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1], [0.3, 0.2, 0.1]]
+        [[0.1, 0.1, 0.1], [0.1, 0.5, 0.1], [0.1, 0.5, 0.1],
+         [0.5, 0.1, 0.1], [0.1, 0.1, 0.1], [0.1, 0.1, 0.1],
+         [0.1, 0.1, 0.5], [0.1, 0.1, 0.5], [0.1, 0.1, 0.5],
+         [0.5, 0.1, 0.1], [0.1, 0.5, 0.1], [0.1, 0.1, 0.5], [0.1, 0.1, 0.5]]
     ])
 
     pred_dist = torch.tensor([
@@ -155,7 +155,7 @@ if __name__ == "__main__":
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
     # update metric
-    iouv = torch.linspace(0.5, 0.95, 10)
+    iouv = torch.linspace(0.05, 0.5, 10)
     for index, pred in enumerate(preds):
         label = labels[labels[:, 0] == index]
         size = img_sizes[index]
@@ -167,8 +167,6 @@ if __name__ == "__main__":
         cls = label[:, 1:2] == pred[:, 5]
         matrix = np.zeros((pred.shape[0], iouv.shape[0])).astype(bool)
 
-        print(iou)
-
         for i in range(len(iouv)):
             y, x = torch.where((iou >= iouv[i]) & cls)
             if len(x):
@@ -178,4 +176,7 @@ if __name__ == "__main__":
                     matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
                     matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
 
+
                 matrix[matches[:, 1].astype(int), i] = True
+
+        print(matrix)
