@@ -195,16 +195,13 @@ if __name__ == "__main__":
     for index, val in enumerate(cls):
         matches = pred_cls == val
 
-        recall = matrix[matches].cumsum(0) / count[index]
+        TP = matrix[matches].cumsum(0)
+        FP = (1 - matrix[matches]).cumsum(0)
 
-        ans = np.interp(-x, -conf[matches], recall[:, 0], left=0)  # negative x, xp because xp decreases
+        # Precision
+        precision = TP / (TP + FP)
+        P[index] = np.interp(-x, -conf[matches], precision[:, 0], left=1)
 
-        print('tp', matrix[matches].cumsum(0))
-        print('total', count[index])
-        print('recall', recall)
-        print('-x', -x)
-        print('conf', -conf[matches])
+        # Recall
+        recall = tpc / (n_l + eps)
 
-        print('ans', ans)
-
-        assert 0 == 1
