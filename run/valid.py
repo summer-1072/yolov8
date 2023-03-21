@@ -155,7 +155,8 @@ if __name__ == "__main__":
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
     # update metric
-    iouv = torch.linspace(0.05, 0.5, 10)
+    iouv = torch.linspace(0.05, 0.2, 4)
+    stats = []
     for index, pred in enumerate(preds):
         label = labels[labels[:, 0] == index]
         size = img_sizes[index]
@@ -171,12 +172,39 @@ if __name__ == "__main__":
             y, x = torch.where((iou >= iouv[i]) & cls)
             if len(x):
                 matches = torch.cat((torch.stack((y, x), 1), iou[y, x][:, None]), 1).cpu().numpy()
-                if len(x) > 1:
-                    matches = matches[matches[:, 2].argsort()[::-1]]
-                    matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                    matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-
+                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
 
                 matrix[matches[:, 1].astype(int), i] = True
 
-        print(matrix)
+        stats.append((torch.tensor(matrix), pred[:, 4], pred[:, 5], label[:, 1]))
+
+    stats = [torch.cat(x, 0).cpu().numpy() for x in zip(*stats)]
+    matrix, conf, pred_cls, target_cls = stats[0], stats[1], stats[2], stats[3]
+
+    index = np.argsort(-conf)
+    matrix, conf, pred_cls = matrix[index], conf[index], pred_cls[index]
+
+    cls, count = np.unique(target_cls, return_counts=True)
+    num_cls = cls.shape[0]
+    P, R, AP = np.zeros((num_cls, 1000)), np.zeros((num_cls, 1000)), np.zeros((num_cls, matrix.shape[1]))
+
+    x = np.linspace(0, 1, 10)
+    for index, val in enumerate(cls):
+        matches = pred_cls == val
+
+        recall = matrix[matches].cumsum(0) / count[index]
+
+        ans = np.interp(-x, -conf[matches], recall[:, 0], left=0)  # negative x, xp because xp decreases
+
+        print('tp', matrix[matches].cumsum(0))
+        print('total', count[index])
+        print('recall', recall)
+        print('-x', -x)
+        print('conf', -conf[matches])
+
+        print('ans', ans)
+
+        assert 0 == 1
