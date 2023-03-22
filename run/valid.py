@@ -19,30 +19,6 @@ class Valid:
 
         self.iouv = torch.linspace(0.5, 0.95, 10)
 
-    def update_metrics(self, labels, preds, img_sizes):
-
-        for index, pred in enumerate(preds):
-            label = labels[labels[:, 0] == index]
-            size = img_sizes[index]
-
-            pred[:, :4] = rescale_box(size[0], size[1], pred[:, :4])
-            label[:, 2:] = rescale_box(size[0], size[1], label[:, 2:])
-
-            iou = bbox_iou(label[:, 2:].unsqueeze(2), pred[:, :4].unsqueeze(1), 'IoU').squeeze(3).clamp(0)
-            cls = label[:, 1:2] == pred[:, 5]
-            matrix = np.zeros((pred.shape[0], self.iouv.shape[0])).astype(bool)
-
-            for i in range(len(self.iouv)):
-                y, x = torch.where((iou >= self.iouv[i]) & cls)
-                if len(x):
-                    matches = torch.cat((torch.stack((y, x), 1), iou[y, x][:, None]), 1).cpu().numpy()
-                    if len(x) > 1:
-                        matches = matches[matches[:, 2].argsort()[::-1]]
-                        matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                        matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-
-                    matrix[matches[:, 1].astype(int), i] = True
-
     def __call__(self, model):
         if self.half:
             model.half()
@@ -201,7 +177,3 @@ if __name__ == "__main__":
         # Precision
         precision = TP / (TP + FP)
         P[index] = np.interp(-x, -conf[matches], precision[:, 0], left=1)
-
-        # Recall
-        recall = tpc / (n_l + eps)
-
