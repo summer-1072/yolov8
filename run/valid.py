@@ -16,12 +16,10 @@ def valid(dataloader, model, hyp, device):
 
     half = hyp['half'] & (device != 'cpu')
 
-    iouv = torch.linspace(0.5, 0.95, 10)
-
     model = model.half() if half else model.float()
     model.eval()
 
-    metric = Metric(iouv, device)
+    metric = Metric(device)
 
     desc = ('%22s' + '%11s' * 6) % ('class', 'images', 'instances', 'Box(P', 'R', 'mAP50', 'mAP50-95)', 'speed')
     pbar = tqdm(dataloader, desc=desc)

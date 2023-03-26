@@ -11,12 +11,12 @@ def smooth(x, f=0.05):
 
 
 class Metric:
-    def __init__(self, iouv, device):
-        self.iouv = iouv
+    def __init__(self, device):
         self.device = device
         self.status = []
         self.total = 0
         self.indices = {}
+        self.iouv = torch.linspace(0.5, 0.95, 10)
 
     def update_status(self, labels, preds, img_sizes):
         for index, pred in enumerate(preds):
