@@ -23,7 +23,7 @@ def valid(dataloader, model, hyp, device):
 
     metric = Metric(iouv, device)
 
-    desc = ('%22s' + '%11s' * 6) % ('class', 'images', 'instances', 'Box(P', 'R', 'mAP50', 'mAP50-95)')
+    desc = ('%22s' + '%11s' * 6) % ('class', 'images', 'instances', 'Box(P', 'R', 'mAP50', 'mAP50-95)', 'speed')
     pbar = tqdm(dataloader, desc=desc)
     for index, (imgs, img_sizes, labels) in enumerate(pbar):
         imgs = (imgs.half() if half else imgs.float()) / 255
@@ -39,7 +39,7 @@ def valid(dataloader, model, hyp, device):
 
         metric.update_status(labels, preds, img_sizes)
 
-    metric.calculate_indices()
+    metric.build_indices()
 
 
 if __name__ == "__main__":

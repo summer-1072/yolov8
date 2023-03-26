@@ -15,6 +15,7 @@ class Metric:
         self.iouv = iouv
         self.device = device
         self.status = []
+        self.total = 0
         self.indices = {}
 
     def update_status(self, labels, preds, img_sizes):
@@ -23,7 +24,7 @@ class Metric:
             label = labels[labels[:, 0] == index]
 
             matrix = torch.zeros(pred.shape[0], self.iouv.shape[0], dtype=torch.bool, device=self.device)
-
+            self.total += 1
             if label.shape[0] != 0:
                 if pred.shape[0] == 0:
                     self.status.append((matrix, *torch.zeros((2, 0), device=self.device), label[:, 1]))
@@ -94,7 +95,6 @@ class Metric:
         precision = self.indices['P'].mean() if len(self.indices['P']) else 0.0
         recall = self.indices['R'].mean() if len(self.indices['R']) else 0.0
         mAP50 = self.indices['AP'][:, 0].mean() if len(self.indices['AP']) else 0.0
-        mAP75 = self.indices['AP'][:, 5].mean() if len(self.indices['AP']) else 0.0
         mAP50_95 = self.indices['AP'].mean() if len(self.indices['AP']) else 0.0
         weight = [0.0, 0.0, 0.1, 0.9]  # P、R、mAP@0.5、mAP@0.5:0.95
         fitness = (np.array([precision, recall, mAP50, mAP50_95]) * weight).sum()
