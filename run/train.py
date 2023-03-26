@@ -7,9 +7,9 @@ import argparse
 import numpy as np
 from torch import nn
 from tqdm import tqdm
-from loss import Loss
 from copy import deepcopy
 from torch.cuda import amp
+from loss import Loss
 from tools import load_model
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
@@ -187,7 +187,7 @@ class Train:
             record_loss = -1
             self.optimizer.zero_grad()
             pbar = tqdm(self.train_dataloader, total=self.num_batches, desc="Epoch {}".format(epoch + 1))
-            for index, (imgs, labels) in enumerate(pbar):
+            for index, (imgs, img_sizes, labels) in enumerate(pbar):
                 # warmup
                 count = index + self.num_batches * epoch
                 if count <= self.warmup_max:
@@ -209,8 +209,7 @@ class Train:
                     imgs = imgs.to(self.device, non_blocking=True).float() / 255
                     pred_box, pred_cls, pred_dist, grid, grid_stride = self.model(imgs)
 
-                    loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist,
-                                                 grid, grid_stride, self.hyp['shape'])
+                    loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
 
                     record_loss = (record_loss * index + loss_items) / (index + 1) if record_loss != -1 else loss_items
 

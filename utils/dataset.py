@@ -203,16 +203,16 @@ class LoadDataset(Dataset):
         self.indices, self.imgs, self.labels = read_labels(label_file)
 
     def __getitem__(self, index):
-        img_size = []
         if self.augment and self.hyp['mosaic']:
             img, labels = mosaic(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
             img_size = [None, None]
 
         else:
             img = cv2.imread(os.path.join(self.img_dir, self.imgs[index]))
-            img_size[0] = img.shape[:2]
+            img_size0 = img.shape[:2]
             img, (h, w), (dy, dx) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
-            img_size[1] = img.shape[:2]
+            img_size1 = img.shape[:2]
+            img_size = [img_size0, img_size1]
             labels = self.labels[index].copy()
             if len(labels):
                 labels[:, 1:5] = scale_box(labels[:, 1:5], h, w, dy, dx)
@@ -245,7 +245,7 @@ class LoadDataset(Dataset):
         for index, label in enumerate(labels):
             label[:, 0] = index
 
-        return torch.stack(imgs, 0), torch.cat(labels, 0), tuple(img_sizes)
+        return torch.stack(imgs, 0), tuple(img_sizes), torch.cat(labels, 0)
 
     def __len__(self):
         return len(self.imgs)

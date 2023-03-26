@@ -1,6 +1,19 @@
 shape: [ 640, 640 ]
 stride: 32
 
+half: False
+
+# loss
+alpha: 1
+beta: 1
+topk: 3
+reg_max: 3
+box_w: 1
+cls_w: 1
+dfl_w: 1
+
+
+
 # NMS
 conf_t: 0.25
 multi_label: False
