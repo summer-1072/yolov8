@@ -20,9 +20,9 @@ def valid(dataloader, model, hyp, device):
     model.eval()
 
     metric = Metric(device)
+    loss_items = torch.zeros(3, device=device)
 
-    desc = ('%22s' + '%11s' * 6) % ('class', 'images', 'instances', 'Box(P', 'R', 'mAP50', 'mAP50-95)', 'speed')
-    pbar = tqdm(dataloader, desc=desc)
+    pbar = tqdm(dataloader)
     for index, (imgs, img_sizes, labels) in enumerate(pbar):
         imgs = (imgs.half() if half else imgs.float()) / 255
         imgs = imgs.to(device)
@@ -30,14 +30,14 @@ def valid(dataloader, model, hyp, device):
         pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
         preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
 
-        loss_val, loss_items = loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
+        loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
 
         preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                     hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
         metric.update_status(labels, preds, img_sizes)
 
-    metric.build_indices()
+    metric.build_metrics()
 
 
 if __name__ == "__main__":
@@ -114,76 +114,28 @@ if __name__ == "__main__":
 
     img_sizes = torch.tensor([[[12, 12], [12, 12]], [[12, 12], [12, 12]]])
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--img_dir', type=str, default='../dataset/coco/images')
-    parser.add_argument('--cls_file', type=str, default='../dataset/coco/cls.yaml')
-    parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
-    parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')
-    parser.add_argument('--fused', type=bool, default=True)
-    parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
-    parser.add_argument('--log_dir', type=str, default='../log/detect')
-    args = parser.parse_args()
+    hyp = {'alpha': 1, 'beta': 1, 'topk': 3, 'reg_max': 3, 'box_w': 1, 'cls_w': 1, 'dfl_w': 1,
+           'conf_t': 0.25, 'multi_label': False, 'max_box': 30000, 'max_wh': 7680,
+           'iou_t': 0.7, 'max_det': 300, 'merge': False}
 
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
 
-    # hyp = {'alpha': 1, 'beta': 1, 'topk': 3, 'reg_max': 3, 'box_w': 1, 'cls_w': 1, 'dfl_w': 1,
-    #        'conf_t': 0.25, 'multi_label': False, 'max_box': 30000, 'max_wh': 7680,
-    #        'iou_t': 0.7, 'max_det': 300, 'merge': False}
-    #
-    # preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
-    #
-    # loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'], hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], 'cpu')
-    #
-    # loss, loss_items = loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
-    #
-    # preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
-    # preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
-    #                             hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'],
+                hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], device)
 
-    # # update metric
-    # iouv = torch.linspace(0.05, 0.2, 4)
-    # stats = []
-    # for index, pred in enumerate(preds):
-    #     label = labels[labels[:, 0] == index]
-    #     size = img_sizes[index]
-    #
-    #     pred[:, :4] = rescale_box(size[0], size[1], pred[:, :4])
-    #     label[:, 2:] = rescale_box(size[0], size[1], label[:, 2:])
-    #
-    #     iou = bbox_iou(label[:, 2:].unsqueeze(1), pred[:, :4].unsqueeze(0), 'IoU').squeeze(2).clamp(0)
-    #     cls = label[:, 1:2] == pred[:, 5]
-    #     matrix = np.zeros((pred.shape[0], iouv.shape[0])).astype(bool)
-    #
-    #     for i in range(len(iouv)):
-    #         y, x = torch.where((iou >= iouv[i]) & cls)
-    #         if len(x):
-    #             matches = torch.cat((torch.stack((y, x), 1), iou[y, x][:, None]), 1).cpu().numpy()
-    #             matches = matches[matches[:, 2].argsort()[::-1]]
-    #             matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-    #             matches = matches[matches[:, 2].argsort()[::-1]]
-    #             matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
-    #
-    #             matrix[matches[:, 1].astype(int), i] = True
-    #
-    #     stats.append((torch.tensor(matrix), pred[:, 4], pred[:, 5], label[:, 1]))
-    #
-    # stats = [torch.cat(x, 0).cpu().numpy() for x in zip(*stats)]
-    # matrix, conf, pred_cls, target_cls = stats[0], stats[1], stats[2], stats[3]
-    #
-    # index = np.argsort(-conf)
-    # matrix, conf, pred_cls = matrix[index], conf[index], pred_cls[index]
-    #
-    # cls, count = np.unique(target_cls, return_counts=True)
-    # num_cls = cls.shape[0]
-    # P, R, AP = np.zeros((num_cls, 1000)), np.zeros((num_cls, 1000)), np.zeros((num_cls, matrix.shape[1]))
-    #
-    # x = np.linspace(0, 1, 10)
-    # for index, val in enumerate(cls):
-    #     matches = pred_cls == val
-    #
-    #     TP = matrix[matches].cumsum(0)
-    #     FP = (1 - matrix[matches]).cumsum(0)
-    #
-    #     # Precision
-    #     precision = TP / (TP + FP)
-    #     P[index] = np.interp(-x, -conf[matches], precision[:, 0], left=1)
+    metric = Metric(device)
+
+    preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
+
+    loss_items = torch.zeros(3, device=device)
+
+    loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+
+    print(loss_items)
+
+    preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
+                                hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+
+    metric.update_status(labels, preds, img_sizes)
+
+    metrics = metric.build_metrics()
