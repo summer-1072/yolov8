@@ -5,39 +5,56 @@ import numpy as np
 from tqdm import tqdm
 from loss import Loss
 from metric import Metric
+from util import time_sync
 from dataset import LoadDataset
 from torch.utils.data import DataLoader
 from box import non_max_suppression, rescale_box, bbox_iou
 
 
-def valid(dataloader, model, hyp, device):
-    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'],
-                hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], device)
-
+def valid(dataloader, model, hyp, names, loss, device):
     half = hyp['half'] & (device != 'cpu')
 
     model = model.half() if half else model.float()
     model.eval()
 
-    metric = Metric(device)
-    loss_items = torch.zeros(3, device=device)
+    metric = Metric(names, device)
+
+    if loss:
+        loss_items = torch.zeros(3, device=device)
+
+    cost = 0
 
     pbar = tqdm(dataloader)
     for index, (imgs, img_sizes, labels) in enumerate(pbar):
+        t1 = time_sync()
+
         imgs = (imgs.half() if half else imgs.float()) / 255
         imgs = imgs.to(device)
 
         pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
         preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
 
-        loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
-
         preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                     hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
-        metric.update_status(labels, preds, img_sizes)
+        t2 = time_sync()
+        cost += t2 - t1
 
-    metric.build_metrics()
+        if loss:
+            loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+
+        metric.update(labels, preds, img_sizes)
+
+    metric.build()
+
+    metric.overviews()
+
+    if loss:
+        return loss_items.cpu() / len(dataloader) + metric.metrics
+
+    else:
+        metric.details()
+        print(f'({cost / len(dataloader.dataset):.3})s')
 
 
 if __name__ == "__main__":
@@ -123,7 +140,7 @@ if __name__ == "__main__":
     loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'],
                 hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], device)
 
-    metric = Metric(device)
+    metric = Metric(['car', 'person', 'bike'], device)
 
     preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
 
@@ -136,6 +153,10 @@ if __name__ == "__main__":
     preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
-    metric.update_status(labels, preds, img_sizes)
+    metric.update(labels, preds, img_sizes)
 
-    metrics = metric.build_metrics()
+    metric.build()
+
+    metric.overviews()
+
+    metric.details()

@@ -15,7 +15,6 @@ class BoxLoss(nn.Module):
 
     def build_dfl_loss(self, pred_dist, target_gap, weight, score_sum):
         pred_dist = pred_dist.view(-1, self.reg_max)
-
         gap_min = target_gap.long()
         gap_max = gap_min + 1
         weight_min = gap_max - target_gap
