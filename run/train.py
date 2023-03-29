@@ -99,7 +99,8 @@ class Train:
 
         val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, self.hyp, False)
         self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=self.hyp['batch_size'],
-                                         num_workers=self.hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
+                                         num_workers=self.hyp['njobs'], shuffle=True,
+                                         collate_fn=LoadDataset.collate_fn)
 
         self.start_epoch = 0
         self.num_batches = len(self.train_dataloader)
@@ -195,7 +196,7 @@ class Train:
 
             record_loss = None
             self.optimizer.zero_grad()
-            pbar = tqdm(self.train_dataloader, total=self.num_batches, desc="Epoch {}".format(epoch + 1))
+            pbar = tqdm(self.train_dataloader, desc="Epoch {}".format(epoch + 1))
             for index, (imgs, img_sizes, labels) in enumerate(pbar):
                 # warmup
                 count = index + self.num_batches * epoch
@@ -220,7 +221,8 @@ class Train:
 
                     loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
 
-                    record_loss = (record_loss * index + loss_items) / (index + 1) if record_loss is not None  else loss_items
+                    record_loss = (record_loss * index + loss_items) / (
+                            index + 1) if record_loss is not None else loss_items
 
                 # backward
                 self.scaler.scale(loss).backward()
@@ -248,7 +250,7 @@ class Train:
             self.scheduler.step()
 
             # validation
-            metric = valid(self.val_dataloader, self.model, self.hyp, self.device, True)
+            metric = valid(self.val_dataloader, self.ema.model, self.hyp, self.device, True)
 
             # early stopping
             stop = self.stopper(epoch, metric['fitness'])
@@ -257,7 +259,7 @@ class Train:
             self.save_train(epoch)
 
             if stop:
-                valid(self.val_dataloader, self.model, self.hyp, self.device, False)
+                valid(self.val_dataloader, self.ema.model, self.hyp, self.device, False)
                 break
 
 
