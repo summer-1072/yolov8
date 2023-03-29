@@ -77,9 +77,9 @@ def letterbox(img, new_shape, stride):
 
 
 def scale_box(box, h, w, dy, dx, dim=-1):
-    x1, y1, x2, y2 = box.chunk(4, dim)
+    x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
 
-    return torch.cat((w * x1 + dx, h * y1 + dy, w * x2 + dx, h * y2 + dy), dim)
+    return np.stack((w * x1 + dx, h * y1 + dy, w * x2 + dx, h * y2 + dy), dim)
 
 
 def rescale_box(shape0, shape1, box):

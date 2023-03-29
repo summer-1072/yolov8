@@ -1,4 +1,4 @@
-param:
+network:
   - 'Conv(3, 80, 3, 2)'
   - 'Conv(80, 160, 3, 2)'
   - 'C2F(160, 160, 3, True)'
@@ -19,4 +19,3 @@ param:
 reg_max: 16
 chs: [ 320, 640, 640 ]
 strides: [ 8, 16, 32 ]
-num_cls: 80

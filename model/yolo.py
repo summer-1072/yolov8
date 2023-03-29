@@ -2,39 +2,39 @@ from modules import *
 
 
 class YOLO(nn.Module):
-    def __init__(self, param, reg_max, chs, strides, num_cls, training):
+    def __init__(self, network, reg_max, chs, strides, cls, training):
         super().__init__()
 
         # BackBone
-        self.p1 = eval(param[0])
-        self.p2 = eval(param[1])
-        self.c2f_1 = eval(param[2])
-        self.p3 = eval(param[3])
-        self.c2f_2 = eval(param[4])
-        self.p4 = eval(param[5])
-        self.c2f_3 = eval(param[6])
-        self.p5 = eval(param[7])
-        self.c2f_4 = eval(param[8])
-        self.sppf = eval(param[9])
+        self.p1 = eval(network[0])
+        self.p2 = eval(network[1])
+        self.c2f_1 = eval(network[2])
+        self.p3 = eval(network[3])
+        self.c2f_2 = eval(network[4])
+        self.p4 = eval(network[5])
+        self.c2f_3 = eval(network[6])
+        self.p5 = eval(network[7])
+        self.c2f_4 = eval(network[8])
+        self.sppf = eval(network[9])
 
         # Neck
-        self.c2f_5 = eval(param[10])
-        self.c2f_6 = eval(param[11])
-        self.p6 = eval(param[12])
-        self.c2f_7 = eval(param[13])
-        self.p7 = eval(param[14])
-        self.c2f_8 = eval(param[15])
+        self.c2f_5 = eval(network[10])
+        self.c2f_6 = eval(network[11])
+        self.p6 = eval(network[12])
+        self.c2f_7 = eval(network[13])
+        self.p7 = eval(network[14])
+        self.c2f_8 = eval(network[15])
         self.upsample1 = nn.Upsample(scale_factor=2, mode='nearest')
         self.upsample2 = nn.Upsample(scale_factor=2, mode='nearest')
 
         # Head
-        ch1, ch2 = max(16, reg_max * 4, chs[0] // 4), max(num_cls, chs[0])
+        ch1, ch2 = max(16, reg_max * 4, chs[0] // 4), max(len(cls), chs[0])
 
         self.conv1 = nn.ModuleList(
             nn.Sequential(Conv(ch, ch1, 3, 1), Conv(ch1, ch1, 3, 1), nn.Conv2d(ch1, reg_max * 4, 1)) for ch in chs)
         self.conv2 = nn.ModuleList(
-            nn.Sequential(Conv(ch, ch2, 3, 1), Conv(ch2, ch2, 3, 1), nn.Conv2d(ch2, num_cls, 1)) for ch in chs)
-        self.anchor = Anchor(num_cls, reg_max, strides, training)
+            nn.Sequential(Conv(ch, ch2, 3, 1), Conv(ch2, ch2, 3, 1), nn.Conv2d(ch2, len(cls), 1)) for ch in chs)
+        self.anchor = Anchor(cls, reg_max, strides, training)
 
     def forward(self, x):
         # BackBone

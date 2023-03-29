@@ -81,14 +81,14 @@ class SPPF(nn.Module):
 
 
 class Anchor(nn.Module):
-    def __init__(self, num_cls, reg_max, strides, training):
+    def __init__(self, cls, reg_max, strides, training):
         super().__init__()
 
-        self.num_cls = num_cls
+        self.cls = cls
         self.reg_max = reg_max
         self.strides = strides
         self.training = training
-        self.num_out = reg_max * 4 + num_cls
+        self.num_out = reg_max * 4 + len(cls)
         self.shape = None
         self.grid = torch.empty(0)
         self.grid_stride = torch.empty(0)
@@ -114,7 +114,7 @@ class Anchor(nn.Module):
             self.grid, self.grid_stride = self.make_grid(x)
 
         dist, cls = torch.cat([xi.view(shape[0], self.num_out, -1) for xi in x], 2).split(
-            (self.reg_max * 4, self.num_cls), 1)
+            (self.reg_max * 4, len(self.cls)), 1)
 
         B, C, A = dist.shape
         gap = self.conv(dist.view(B, 4, self.reg_max, A).transpose(2, 1).softmax(1)).view(B, 4, A)
@@ -122,12 +122,12 @@ class Anchor(nn.Module):
         # B、A、C
         gap = gap.permute(0, 2, 1).contiguous()
         cls = cls.permute(0, 2, 1).contiguous()
+        dist = dist.permute(0, 2, 1).contiguous()
 
         box = gap2box(gap, self.grid)
-        cls = cls.sigmoid()
 
         if not self.training:
-            return torch.cat((box * self.grid_stride, cls), 2)
+            return torch.cat((box * self.grid_stride, cls.sigmoid()), 2)
 
         else:
             return box, cls, dist, self.grid, self.grid_stride

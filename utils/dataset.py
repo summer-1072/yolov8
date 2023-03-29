@@ -45,7 +45,7 @@ def read_labels(file):
     with open(file, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
-        print('reading {}, {} coco'.format(file, len(lines)))
+        print('reading {}, {} records'.format(file, len(lines)))
         for index in range(len(lines)):
             indices.append(index)
             line = lines[index].replace('\n', '').split('  ')

@@ -3,7 +3,7 @@ from modules import *
 from yolo import YOLO
 
 
-# 模型参数转移函数
+# 权重参数转移函数
 def transform_weight(model, pretrain):
     for m in model.modules():
         if isinstance(m, Conv) and hasattr(m, 'bn'):
@@ -37,13 +37,12 @@ def load_weight(model, weight_path, fused, training):
     if fused:
         if training:
             model_dict = model.state_dict()
-            for k, v in weight_dict.items():
-                # conv: weight
-                if k in model_dict:
-                    model_dict[k] = v
-                # bn: bias
-                else:
-                    model_dict[k.replace('conv.', 'bn.')] = v
+            for k0 in weight_dict.keys():
+                # conv: weight, bn: bias
+                k1 = k0 if k0 in model_dict else k0.replace('conv.', 'bn.')
+
+                if model_dict[k1].shape == weight_dict[k0].shape:
+                    model_dict[k1] = weight_dict[k0]
 
             model.load_state_dict(model_dict)
 
@@ -62,9 +61,9 @@ def load_weight(model, weight_path, fused, training):
         model.load_state_dict(weight_dict)
 
 
-def load_model(model_path, fused, weight_path, training):
-    args = yaml.safe_load(open(model_path, encoding="utf-8"))
-    model = YOLO(args['param'], args['reg_max'], args['chs'], args['strides'], args['num_cls'], training)
+def load_model(model_path, cls, fused, weight_path, training):
+    config = yaml.safe_load(open(model_path, encoding="utf-8"))
+    model = YOLO(config['network'], config['reg_max'], config['chs'], config['strides'], cls, training)
 
     if weight_path:
         load_weight(model, weight_path, fused, training)

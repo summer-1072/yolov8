@@ -1,17 +1,44 @@
 shape: [ 640, 640 ]
-stride: 32
 
 half: False
+
+# optimizer
+optim: Adam
+lr: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+
+# scheduler
+one_cycle: True
+lrf: 0.01
+
+# ema
+ema_decay: 0.9999
+tau: 2000
+
+# early stop
+patience: 50
+
+warmup_epoch: 3
+warmup_bias_lr: 0.1
+warmup_momentum: 0.8
+
+
+num_batch_size: 4
+batch_size: 2
+epochs: 1
+njobs: 1
+
+close_mosaic: 10
+close_affine: 10
 
 # loss
 alpha: 1
 beta: 1
 topk: 3
-reg_max: 3
 box_w: 1
 cls_w: 1
 dfl_w: 1
-
 
 
 # NMS

@@ -36,13 +36,16 @@ def save_results(img, pred, cls, file):
 
 
 def detect(args, device):
+    # load cls
+    cls = yaml.safe_load(open(args.cls_path, encoding="utf-8"))
+
     # load hyp
-    hyp = yaml.safe_load(open(args.hyp_file, encoding="utf-8"))
+    hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     half = hyp['half'] & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_file, args.fused, args.weight_file, False)
+    model = load_model(args.model_path, cls, args.fused, args.weight_path, False)
     model = model.half() if half else model.float()
     model.to(device)
     model.eval()
@@ -56,13 +59,12 @@ def detect(args, device):
     os.makedirs(log_dir)
 
     files = [x for x in os.listdir(args.img_dir)]
-    cls = yaml.safe_load(open(args.cls_file, encoding="utf-8"))
     d1, d2, d3, num = 0, 0, 0, len(files)
     for i, file in enumerate(files):
         img0 = cv2.imread(os.path.join(args.img_dir, file))
 
         t1 = time_sync()
-        img1, _, _ = letterbox(img0, hyp['shape'], hyp['stride'])
+        img1, _, _ = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
         img1 = img1.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img1 = np.ascontiguousarray(img1)
         img1 = img1 / 255
@@ -101,11 +103,11 @@ def detect(args, device):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_dir', type=str, default='../dataset/coco/images')
-parser.add_argument('--cls_file', type=str, default='../dataset/coco/cls.yaml')
-parser.add_argument('--model_file', type=str, default='../config/model/yolov8x.yaml')
-parser.add_argument('--weight_file', type=str, default='../config/weight/yolov8x.pth')
+parser.add_argument('--cls_path', type=str, default='../dataset/coco/cls.yaml')
+parser.add_argument('--model_path', type=str, default='../config/model/yolov8s.yaml')
+parser.add_argument('--weight_path', type=str, default='../config/weight/yolov8s.pth')
 parser.add_argument('--fused', type=bool, default=True)
-parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
+parser.add_argument('--hyp_path', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--log_dir', type=str, default='../log/detect')
 args = parser.parse_args()
 

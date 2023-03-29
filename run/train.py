@@ -6,18 +6,19 @@ import torch
 import argparse
 import numpy as np
 from torch import nn
+from loss import Loss
 from tqdm import tqdm
+from valid import valid
 from copy import deepcopy
 from torch.cuda import amp
-from loss import Loss
 from tools import load_model
+from dataset import LoadDataset
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from dataset import build_labels, LoadDataset
 
 
 class EMA:  # exponential moving average
-    def __int__(self, model, decay, tau):
+    def __init__(self, model, decay, tau):
         self.model = deepcopy(model).eval()
         self.updates = 0
         self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
@@ -26,9 +27,12 @@ class EMA:  # exponential moving average
         self.updates += 1
         decay = self.decay_fun(self.updates)
 
-        for k, v in self.model.state_dict().items():
-            if v.dtype.is_floating_point:
-                v = v * decay + (1 - decay) * model.state_dict()[k].detach()
+        model_dict = self.model.state_dict()
+        for k in model_dict.keys():
+            if model_dict[k].dtype.is_floating_point:
+                model_dict[k] = model_dict[k] * decay + (1 - decay) * model.state_dict()[k].detach()
+
+        self.model.load_state_dict(model_dict)
 
 
 class EarlyStop:
@@ -51,51 +55,56 @@ class EarlyStop:
 
 
 class Train:
-    def __int__(self, args, hyp):
-        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
+    def __init__(self, args, device):
         self.args = args
-        self.hyp = hyp
         self.device = device
 
+        # load cls
+        self.cls = yaml.safe_load(open(args.cls_path, encoding="utf-8"))
+
+        # load hyp
+        self.hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
+
         # model
-        self.model = load_model(args.model_path, args.fused, args.weight_path, True)
+        self.model = load_model(args.model_path, self.cls, args.fused, args.weight_path, True)
         self.model.to(device)
         self.model.train()
 
         # optimizer
-        self.optimizer = self.build_optimizer(hyp['optim'], hyp['lr'], hyp['momentum'], hyp['decay'])
+        self.optimizer = self.build_optimizer(self.hyp['optim'], self.hyp['lr'],
+                                              self.hyp['momentum'], self.hyp['weight_decay'])
 
         # scheduler
-        self.lr_fun, self.scheduler = self.build_scheduler(hyp['one_cycle'], hyp['lrf'], args.epochs)
+        self.lr_fun, self.scheduler = self.build_scheduler(self.hyp['one_cycle'], self.hyp['lrf'], self.hyp['epochs'])
 
         # loss
-        self.loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'],
-                         hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], device)
+        self.loss = Loss(self.hyp['alpha'], self.hyp['beta'], self.hyp['topk'], self.hyp['box_w'],
+                         self.hyp['cls_w'], self.hyp['dfl_w'], self.model.anchor.reg_max, device)
 
         # ema
-        self.ema = EMA(self.model, hyp['decay'], hyp['tau'])
+        self.ema = EMA(self.model, self.hyp['ema_decay'], self.hyp['tau'])
 
         # early stop
-        self.stopper = EarlyStop(hyp['patience'])
+        self.stopper = EarlyStop(self.hyp['patience'])
 
         # auto mixed precision
         self.amp = device != 'cpu'
         self.scaler = amp.GradScaler(enabled=self.amp)
 
         # dataset
-        train_dataset = LoadDataset(args.train_img_dir, args.train_label_file, hyp, True)
-        self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=args.batch_size,
-                                           num_workers=args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
+        train_dataset = LoadDataset(args.train_img_dir, args.train_label_path, self.hyp, True)
+        self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=self.hyp['batch_size'],
+                                           num_workers=self.hyp['njobs'], shuffle=True,
+                                           collate_fn=LoadDataset.collate_fn)
 
-        val_dataset = LoadDataset(args.val_img_dir, args.val_label_file, hyp, False)
-        self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=args.batch_size,
-                                         num_workers=args.njobs, shuffle=True, collate_fn=LoadDataset.collate_fn)
+        val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, self.hyp, False)
+        self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=self.hyp['batch_size'],
+                                         num_workers=self.hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
 
         self.start_epoch = 0
         self.num_batches = len(self.train_dataloader)
-        self.accumulate = max(round(hyp['num_batch_size'] / hyp['batch_size']), 1)
-        self.warmup_max = max(round(hyp['warmup_epoch'] * self.num_batches), 100)
+        self.accumulate = max(round(self.hyp['num_batch_size'] / self.hyp['batch_size']), 1)
+        self.warmup_max = max(round(self.hyp['warmup_epoch'] * self.num_batches), 100)
 
         # resume train
         if self.args.log_dir:
@@ -177,14 +186,14 @@ class Train:
 
     def exec_train(self):
         last_step = -1
-        for epoch in range(self.start_epoch, self.args.epochs):
+        for epoch in range(self.start_epoch, self.hyp['epochs']):
             if epoch >= self.hyp['close_mosaic']:
                 self.train_dataloader.dataset.hyp['mosaic'] = False
 
             if epoch >= self.hyp['close_affine']:
                 self.train_dataloader.dataset.hyp['affine'] = False
 
-            record_loss = -1
+            record_loss = None
             self.optimizer.zero_grad()
             pbar = tqdm(self.train_dataloader, total=self.num_batches, desc="Epoch {}".format(epoch + 1))
             for index, (imgs, img_sizes, labels) in enumerate(pbar):
@@ -211,7 +220,7 @@ class Train:
 
                     loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
 
-                    record_loss = (record_loss * index + loss_items) / (index + 1) if record_loss != -1 else loss_items
+                    record_loss = (record_loss * index + loss_items) / (index + 1) if record_loss is not None  else loss_items
 
                 # backward
                 self.scaler.scale(loss).backward()
@@ -233,50 +242,43 @@ class Train:
                 memory = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
                 pbar.set_description(
                     ('%12s' * (4 + record_loss.shape[0])) %
-                    (f'{epoch + 1}/{self.args.epochs}', memory, *record_loss, labels.shape[0], self.hyp['shape']))
+                    (f"{epoch + 1}/{self.hyp['epochs']}", memory, *record_loss, labels.shape[0], self.hyp['shape']))
 
             # scheduler step
             self.scheduler.step()
 
             # validation
+            metric = valid(self.val_dataloader, self.model, self.hyp, self.device, True)
 
             # early stopping
-            stop = self.stopper(epoch)
+            stop = self.stopper(epoch, metric['fitness'])
 
             # save train
             self.save_train(epoch)
 
             if stop:
+                valid(self.val_dataloader, self.model, self.hyp, self.device, False)
                 break
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--train_img_dir', type=str, default='../dataset/bdd100k/images/train')
-parser.add_argument('--train_label_file', type=str, default='../dataset/bdd100k/labels/train.txt')
-parser.add_argument('--val_img_dir', type=str, default='../dataset/bdd100k/images/val')
-parser.add_argument('--val_label_file', type=str, default='../dataset/bdd100k/labels/val.txt')
-parser.add_argument('--cls_file', type=str, default='../dataset/bdd100k/cls.yaml')
-
-parser.add_argument('--hyp_file', type=str, default='../config/hyp/hyp.yaml')
-parser.add_argument('--model_path', type=str, default='../config/model/yolov8x.yaml')
-parser.add_argument('--weight_path', type=str, default='../config/weight/yolov8x.pth')
-parser.add_argument('--training', type=bool, default=True)
-parser.add_argument('--fused', type=bool, default=True)
-
-parser.add_argument('--pretrain_dir', type=str, default='')
-parser.add_argument('--log_dir', type=str, default='../log/train')
-parser.add_argument('--batch_size', type=str, default=2)
-parser.add_argument('--njobs', type=str, default=1)
-args = parser.parse_args()
-
 if __name__ == "__main__":
-    # build label
-    if not os.path.exists(args.train_label_file) or not os.path.exists(args.val_label_file):
-        print('build yolo labels')
-        cls = yaml.safe_load(open('../dataset/bdd100k/cls.yaml', encoding="utf-8"))
-        build_labels('../dataset/bdd100k/labels/train.json',
-                     args.train_label_file, args.train_img_dir, cls)
-        build_labels('../dataset/bdd100k/labels/val.json',
-                     args.val_label_file, args.val_img_dir, cls)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train_img_dir', default='../dataset/bdd100k/images/train')
+    parser.add_argument('--train_label_path', default='../dataset/bdd100k/labels/train.txt')
+    parser.add_argument('--val_img_dir', default='../dataset/bdd100k/images/val')
+    parser.add_argument('--val_label_path', default='../dataset/bdd100k/labels/val.txt')
+    parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
 
-    # train(args)
+    parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
+    parser.add_argument('--model_path', default='../config/model/yolov8x.yaml')
+    parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
+    parser.add_argument('--training', default=True)
+    parser.add_argument('--fused', default=True)
+
+    parser.add_argument('--pretrain_dir', default='')
+    parser.add_argument('--log_dir', default='')
+    args = parser.parse_args()
+
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    train = Train(args, device)
+    train.exec_train()

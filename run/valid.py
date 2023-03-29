@@ -11,16 +11,17 @@ from torch.utils.data import DataLoader
 from box import non_max_suppression, rescale_box, bbox_iou
 
 
-def valid(dataloader, model, hyp, names, loss, device):
+def valid(dataloader, model, hyp, device, training):
     half = hyp['half'] & (device != 'cpu')
 
     model = model.half() if half else model.float()
     model.eval()
 
-    metric = Metric(names, device)
+    metric = Metric(model.anchor.cls, device)
 
-    if loss:
-        loss_items = torch.zeros(3, device=device)
+    loss_items = torch.zeros(3)
+    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'],
+                hyp['cls_w'], hyp['dfl_w'], model.anchor.reg_max, device)
 
     cost = 0
 
@@ -40,21 +41,23 @@ def valid(dataloader, model, hyp, names, loss, device):
         t2 = time_sync()
         cost += t2 - t1
 
-        if loss:
-            loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+        loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
 
         metric.update(labels, preds, img_sizes)
 
     metric.build()
 
-    metric.overviews()
-
-    if loss:
-        return loss_items.cpu() / len(dataloader) + metric.metrics
+    if training:
+        model.float()
+        metric.overviews()
 
     else:
         metric.details()
-        print(f'({cost / len(dataloader.dataset):.3})s')
+        print(f'speed: ({cost / len(dataloader.dataset):.3})s per image')
+
+    loss_val = [round(x, 4) for x in (loss_items / len(dataloader)).tolist()]
+
+    return {**dict(zip(['box_loss', 'cls_loss', 'dfl_loss'], loss_val)), **metric.metrics}
 
 
 if __name__ == "__main__":
@@ -131,14 +134,12 @@ if __name__ == "__main__":
 
     img_sizes = torch.tensor([[[12, 12], [12, 12]], [[12, 12], [12, 12]]])
 
-    hyp = {'alpha': 1, 'beta': 1, 'topk': 3, 'reg_max': 3, 'box_w': 1, 'cls_w': 1, 'dfl_w': 1,
-           'conf_t': 0.25, 'multi_label': False, 'max_box': 30000, 'max_wh': 7680,
-           'iou_t': 0.7, 'max_det': 300, 'merge': False}
+    hyp = {'alpha': 1, 'beta': 1, 'topk': 3, 'box_w': 1, 'cls_w': 1, 'dfl_w': 1, 'conf_t': 0.25,
+           'multi_label': False, 'max_box': 30000, 'max_wh': 7680, 'iou_t': 0.7, 'max_det': 300, 'merge': False}
 
     device = 'cpu'
 
-    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['reg_max'],
-                hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], device)
+    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], 3, device)
 
     metric = Metric(['car', 'person', 'bike'], device)
 
@@ -148,14 +149,15 @@ if __name__ == "__main__":
 
     loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
 
-    print(loss_items)
-
     preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
     metric.update(labels, preds, img_sizes)
 
     metric.build()
+
+    print({**dict(zip(['box_loss', 'cls_loss', 'dfl_loss'], [round(x, 4) for x in (loss_items / len(preds)).tolist()])),
+           **metric.metrics})
 
     metric.overviews()
 

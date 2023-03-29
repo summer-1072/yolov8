@@ -38,18 +38,18 @@ class BoxLoss(nn.Module):
 
 
 class Loss:
-    def __init__(self, alpha, beta, topk, reg_max, box_w, cls_w, dfl_w, device, eps=1e-8):
+    def __init__(self, alpha, beta, topk, box_w, cls_w, dfl_w, reg_max, device, eps=1e-8):
         self.alpha = alpha
         self.beta = beta
         self.topk = topk
-        self.reg_max = reg_max
         self.box_w = box_w
         self.cls_w = cls_w
         self.dfl_w = dfl_w
+        self.reg_max = reg_max
         self.device = device
         self.eps = eps
 
-        self.bce = nn.BCELoss(reduction='none')
+        self.bce = nn.BCEWithLogitsLoss(reduction='none')
         self.boxloss = BoxLoss(reg_max)
 
     def preprocess(self, labels, batch_size):
@@ -167,7 +167,7 @@ class Loss:
 
         score_sum = max(target_score.sum(), 1)
 
-        loss[1] = self.bce(pred_cls, target_score.sigmoid()).sum() / score_sum
+        loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
         loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos)
 
         loss[0] *= self.box_w
