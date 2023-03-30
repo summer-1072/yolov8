@@ -3,7 +3,7 @@ import torch
 import argparse
 import numpy as np
 from tqdm import tqdm
-from loss import Loss
+from loss import LossFun
 from metric import Metric
 from util import time_sync
 from dataset import LoadDataset
@@ -20,8 +20,8 @@ def valid(dataloader, model, hyp, device, training):
     metric = Metric(model.anchor.cls, device)
 
     loss_items = torch.zeros(3)
-    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'],
-                hyp['cls_w'], hyp['dfl_w'], model.anchor.reg_max, device)
+    loss_fun = LossFun(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'],
+                       hyp['cls_w'], hyp['dfl_w'], model.anchor.reg_max, device)
 
     cost = 0
 
@@ -41,7 +41,7 @@ def valid(dataloader, model, hyp, device, training):
         t2 = time_sync()
         cost += t2 - t1
 
-        loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+        loss_items += loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
 
         metric.update(labels, preds, img_sizes)
 
@@ -55,9 +55,9 @@ def valid(dataloader, model, hyp, device, training):
         metric.details()
         print(f'speed: ({cost / len(dataloader.dataset):.3})s per image')
 
-    loss_val = [round(x, 4) for x in (loss_items / len(dataloader)).tolist()]
+    loss_mean = [round(x, 4) for x in (loss_items / len(dataloader)).tolist()]
 
-    return {**dict(zip(['box_loss', 'cls_loss', 'dfl_loss'], loss_val)), **metric.metrics}
+    return {**dict(zip(['val/' + loss_fun.names], loss_mean)), **metric.metrics}
 
 
 if __name__ == "__main__":

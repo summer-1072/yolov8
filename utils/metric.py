@@ -107,7 +107,8 @@ class Metric:
         weight = [0.0, 0.0, 0.1, 0.9]  # [P, R, mAP@0.5, mAP@0.5:0.95]
         fitness = (np.array([p, r, mAP50, mAP50_95]) * weight).sum()
 
-        self.metrics = {'p': p, 'r': r, 'mAP50': mAP50, 'mAP50_95': mAP50_95, 'fitness': fitness}
+        self.metrics = {'metric/precision': p, 'metric/recall': r,
+                        'metric/mAP50': mAP50, 'metric/mAP50-95': mAP50_95, 'metric/fitness': fitness}
 
     def overviews(self):
         print(('%22s' + '%12s' * 6) % ('images', 'class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))

@@ -3,12 +3,11 @@ import math
 import torch
 import numpy as np
 from util import color
-from box import scale_offset
 from collections import Counter
 import matplotlib.pyplot as plt
 
 
-def plot_images(imgs, labels, save_file, max_shape=(2880, 3840), max_subplots=16):
+def plot_images(imgs, labels, file, max_shape=(2880, 3840), max_subplots=16):
     if isinstance(imgs, torch.Tensor):
         imgs = imgs.cpu().float().numpy()
 
@@ -22,7 +21,7 @@ def plot_images(imgs, labels, save_file, max_shape=(2880, 3840), max_subplots=16
     B = min(B, max_subplots)
     num = np.ceil(B ** 0.5)
 
-    labels[:, 2:6] = scale_offset(labels[:, 2:6],  W, H)
+    labels[:, 2:6] = scale_offset(labels[:, 2:6], W, H)
 
     img_mosaic = np.full((int(num * H), int(num * W), 3), 0, dtype=np.uint8)
     for index, img in enumerate(imgs):
@@ -47,10 +46,10 @@ def plot_images(imgs, labels, save_file, max_shape=(2880, 3840), max_subplots=16
         W = math.ceil(ratio * W)
         img_mosaic = cv2.resize(img_mosaic, tuple(int(x * num) for x in (W, H)), cv2.INTER_LINEAR)
 
-    cv2.imwrite(save_file, img_mosaic)
+    cv2.imwrite(file, img_mosaic)
 
 
-def plot_labels(labels, cls, save_file):
+def plot_labels(train_labels, val_labels, cls, file_path):
     indices = []
     centers = []
     whs = []
@@ -83,4 +82,8 @@ def plot_labels(labels, cls, save_file):
     plt.ylabel('h')
     plt.scatter([x[0] for x in whs], [x[1] for x in whs], s=0.05)
 
-    plt.savefig(save_file)
+    plt.savefig(file_path)
+
+
+def plot_metrics():
+    pass

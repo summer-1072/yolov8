@@ -37,7 +37,7 @@ class BoxLoss(nn.Module):
         return iou_loss, dfl_loss
 
 
-class Loss:
+class LossFun:
     def __init__(self, alpha, beta, topk, box_w, cls_w, dfl_w, reg_max, device, eps=1e-8):
         self.alpha = alpha
         self.beta = beta
@@ -51,6 +51,8 @@ class Loss:
 
         self.bce = nn.BCEWithLogitsLoss(reduction='none')
         self.boxloss = BoxLoss(reg_max)
+
+        self.names = ['box_loss', 'cls_loss', 'dfl_loss']
 
     def preprocess(self, labels, batch_size):
         if labels.shape[0] == 0:

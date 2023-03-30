@@ -6,31 +6,33 @@ import torch
 import argparse
 import numpy as np
 from torch import nn
-from loss import Loss
 from tqdm import tqdm
 from valid import valid
+from loss import LossFun
 from copy import deepcopy
 from torch.cuda import amp
 from tools import load_model
 from dataset import LoadDataset
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
+from plot import plot_labels, plot_images
 
 
 class EMA:  # exponential moving average
     def __init__(self, model, decay, tau):
         self.model = deepcopy(model).eval()
         self.updates = 0
+        self.decay = 0
         self.decay_fun = lambda x: decay * (1 - math.exp(-x / tau))
 
     def update(self, model):
         self.updates += 1
-        decay = self.decay_fun(self.updates)
+        self.decay = self.decay_fun(self.updates)
 
         model_dict = self.model.state_dict()
         for k in model_dict.keys():
             if model_dict[k].dtype.is_floating_point:
-                model_dict[k] = model_dict[k] * decay + (1 - decay) * model.state_dict()[k].detach()
+                model_dict[k] = model_dict[k] * self.decay + (1 - self.decay) * model.state_dict()[k].detach()
 
         self.model.load_state_dict(model_dict)
 
@@ -42,7 +44,9 @@ class EarlyStop:
         self.patience = patience or float('inf')
 
     def __call__(self, epoch, fitness):
+        best_pth = False
         if fitness >= self.best_fitness:
+            best_pth = True
             self.best_epoch = epoch
             self.best_fitness = fitness
 
@@ -51,216 +55,237 @@ class EarlyStop:
         if stop:
             print(f'stop training early at {epoch}th epoch, the best one is {self.best_epoch}th epoch')
 
-        return stop
+        return stop, best_pth
 
 
-class Train:
-    def __init__(self, args, device):
-        self.args = args
-        self.device = device
+def build_optimizer(model, optim, lr, momentum, decay):
+    params = [[], [], []]
+    for v in model.modules():
+        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
+            params[0].append(v.bias)
+        if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
+            params[1].append(v.weight)
+        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
+            params[2].append(v.weight)
 
-        # load cls
-        self.cls = yaml.safe_load(open(args.cls_path, encoding="utf-8"))
+    if optim == 'Adam':
+        optimizer = torch.optim.Adam(params[0], lr=lr, betas=(momentum, 0.999))
+    elif optim == 'AdamW':
+        optimizer = torch.optim.AdamW(params[0], lr=lr, betas=(momentum, 0.999))
+    elif optim == 'RMSProp':
+        optimizer = torch.optim.RMSprop(params[0], lr=lr, momentum=momentum)
+    elif optim == 'SGD':
+        optimizer = torch.optim.SGD(params[0], lr=lr, momentum=momentum, nesterov=True)
+    else:
+        raise NotImplementedError(f'Optimizer {optim} not implemented.')
 
-        # load hyp
-        self.hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
+    optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
+    optimizer.add_param_group({'params': params[2], 'weight_decay': decay})
 
-        # model
-        self.model = load_model(args.model_path, self.cls, args.fused, args.weight_path, True)
-        self.model.to(device)
-        self.model.train()
+    return optimizer
 
-        # optimizer
-        self.optimizer = self.build_optimizer(self.hyp['optim'], self.hyp['lr'],
-                                              self.hyp['momentum'], self.hyp['weight_decay'])
 
-        # scheduler
-        self.lr_fun, self.scheduler = self.build_scheduler(self.hyp['one_cycle'], self.hyp['lrf'], self.hyp['epochs'])
+def build_scheduler(optimizer, one_cycle, lrf, epochs):
+    if one_cycle:
+        lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
+    else:
+        lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
-        # loss
-        self.loss = Loss(self.hyp['alpha'], self.hyp['beta'], self.hyp['topk'], self.hyp['box_w'],
-                         self.hyp['cls_w'], self.hyp['dfl_w'], self.model.anchor.reg_max, device)
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_fun)
 
-        # ema
-        self.ema = EMA(self.model, self.hyp['ema_decay'], self.hyp['tau'])
+    return lr_fun, scheduler
 
-        # early stop
-        self.stopper = EarlyStop(self.hyp['patience'])
 
-        # auto mixed precision
-        self.amp = device != 'cpu'
-        self.scaler = amp.GradScaler(enabled=self.amp)
+def save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, log_dir):
+    param = {'start_epoch': epoch, 'updates': ema.updates,
+             'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
 
-        # dataset
-        train_dataset = LoadDataset(args.train_img_dir, args.train_label_path, self.hyp, True)
-        self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=self.hyp['batch_size'],
-                                           num_workers=self.hyp['njobs'], shuffle=True,
-                                           collate_fn=LoadDataset.collate_fn)
+    with open(os.path.join(log_dir, 'train.json'), 'w') as f:
+        json.dump(param, f)
 
-        val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, self.hyp, False)
-        self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=self.hyp['batch_size'],
-                                         num_workers=self.hyp['njobs'], shuffle=True,
-                                         collate_fn=LoadDataset.collate_fn)
+    torch.save(model, os.path.join(log_dir, 'weight', 'model.pth'))
+    torch.save(ema.model, os.path.join(log_dir, 'weight', 'ema.pth'))
+    torch.save(optimizer, os.path.join(log_dir, 'weight', 'optim.pth'))
 
-        self.start_epoch = 0
-        self.num_batches = len(self.train_dataloader)
-        self.accumulate = max(round(self.hyp['num_batch_size'] / self.hyp['batch_size']), 1)
-        self.warmup_max = max(round(self.hyp['warmup_epoch'] * self.num_batches), 100)
+    if best_pth:
+        torch.save(ema.model, os.path.join(log_dir, 'weight', 'best.pth'))
 
-        # resume train
-        if self.args.log_dir:
-            self.start_epoch = self.resume_train()
+    head = (' ' * 12).join(['epoch'] + list(metric.keys()))
+    line = (' ' * 12).join([str(x) for x in [epoch + 1] + list(metric.values())])
+    if os.path.exists(os.path.join(log_dir, 'log.txt')):
+        with open(os.path.join(log_dir, 'log.txt'), 'a+') as f:
+            f.write(line + '\n')
+    else:
+        with open(os.path.join(log_dir, 'log.txt'), 'a+') as f:
+            f.write(head + '\n')
+            f.write(line + '\n')
 
-        # build log dir
-        else:
-            os.makedirs('../log/train', exist_ok=True)
-            ord = max([int(x[5:]) for x in os.listdir('../log/train')]) + 1 if len(os.listdir('../log/train')) else 1
-            self.args.log_dir = os.path.join('../log/train/train' + str(ord))
-            os.makedirs(self.args.log_dir, exist_ok=True)
-            os.makedirs(os.path.join(self.args.log_dir, 'weight'), exist_ok=True)
 
-    def build_optimizer(self, optim, lr, momentum, decay):
-        params = [[], [], []]
-        for v in self.model.modules():
-            if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):
-                params[0].append(v.bias)
-            if hasattr(v, 'weight') and isinstance(v, nn.BatchNorm2d):
-                params[1].append(v.weight)
-            elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
-                params[2].append(v.weight)
+def resume_record(model, ema, optimizer, scheduler, stopper, log_dir):
+    with open(os.path.join(log_dir, 'train.json'), 'r') as f:
+        param = json.load(f)
 
-        if optim == 'Adam':
-            optimizer = torch.optim.Adam(params[0], lr=lr, betas=(momentum, 0.999))
-        elif optim == 'AdamW':
-            optimizer = torch.optim.AdamW(params[0], lr=lr, betas=(momentum, 0.999))
-        elif optim == 'RMSProp':
-            optimizer = torch.optim.RMSprop(params[0], lr=lr, momentum=momentum)
-        elif optim == 'SGD':
-            optimizer = torch.optim.SGD(params[0], lr=lr, momentum=momentum, nesterov=True)
-        else:
-            raise NotImplementedError(f'Optimizer {optim} not implemented.')
+    start_epoch = param['start_epoch']
+    updates = param['updates']
+    best_epoch = param['best_epoch']
+    best_fitness = param['best_fitness']
 
-        optimizer.add_param_group({'params': params[1], 'weight_decay': 0.0})
-        optimizer.add_param_group({'params': params[2], 'weight_decay': decay})
+    model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'model.pth')))
+    ema.model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'ema.pth')))
+    optimizer.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'optim.pth')))
+    ema.updates = updates
+    scheduler.last_epoch = start_epoch - 1
+    stopper.best_epoch = best_epoch
+    stopper.best_fitness = best_fitness
 
-        return optimizer
+    return start_epoch
 
-    def build_scheduler(self, one_cycle, lrf, epochs):
-        if one_cycle:
-            lr_fun = lambda x: ((1 - math.cos(x * math.pi / epochs)) / 2) * (lrf - 1) + 1
-        else:
-            lr_fun = lambda x: (1 - x / epochs) * (1.0 - lrf) + lrf  # linear
 
-        scheduler = lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_fun)
+def train(args, device):
+    # load cls
+    cls = yaml.safe_load(open(args.cls_path, encoding="utf-8"))
 
-        return lr_fun, scheduler
+    # load hyp
+    hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
-    def save_train(self, epoch):
-        param = {'start_epoch': epoch, 'best_epoch': self.stopper.best_epoch,
-                 'best_fitness': self.stopper.best_fitness, 'updates': self.ema.updates}
+    # model
+    model = load_model(args.model_path, cls, args.fused, args.weight_path, True)
+    model.to(device)
+    model.train()
 
-        with open(os.path.join(self.args.log_dir, 'train.json'), 'w') as f:
-            json.dump(param, f)
+    # ema
+    ema = EMA(model, hyp['ema_decay'], hyp['tau'])
 
-        torch.save(self.model, os.path.join(self.args.log_dir, 'weight', 'model.pth'))
-        torch.save(self.ema.model, os.path.join(self.args.log_dir, 'weight', 'ema.pth'))
-        torch.save(self.optimizer, os.path.join(self.args.log_dir, 'weight', 'optim.pth'))
+    # optimizer
+    optimizer = build_optimizer(model, hyp['optim'], hyp['lr'], hyp['momentum'], hyp['weight_decay'])
 
-    def resume_train(self):
-        with open(os.path.join(self.args.log_dir, 'train.json'), 'r') as f:
-            param = json.load(f)
+    # scheduler
+    lr_fun, scheduler = build_scheduler(optimizer, hyp['one_cycle'], hyp['lrf'], hyp['epochs'])
 
-        start_epoch = param['start_epoch']
-        best_epoch = param['best_epoch']
-        best_fitness = param['best_fitness']
-        updates = param['updates']
+    # loss
+    loss_fun = LossFun(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'], hyp['cls_w'], hyp['dfl_w'],
+                       model.anchor.reg_max, device)
 
-        self.model.load_state_dict(torch.load(os.path.join(self.args.log_dir, 'weight', 'model.pth')))
-        self.ema.model.load_state_dict(torch.load(os.path.join(self.args.log_dir, 'weight', 'ema.pth')))
-        self.optimizer.load_state_dict(torch.load(os.path.join(self.args.log_dir, 'weight', 'optim.pth')))
-        self.ema.updates = updates
-        self.scheduler.last_epoch = start_epoch - 1
-        self.stopper.best_epoch = best_epoch
-        self.stopper.best_fitness = best_fitness
+    # early stop
+    stopper = EarlyStop(hyp['patience'])
 
-        return start_epoch
+    # auto mixed precision
+    scaler = amp.GradScaler(enabled=device != 'cpu')
 
-    def exec_train(self):
-        last_step = -1
-        for epoch in range(self.start_epoch, self.hyp['epochs']):
-            if epoch >= self.hyp['close_mosaic']:
-                self.train_dataloader.dataset.hyp['mosaic'] = False
+    # dataset
+    train_dataset = LoadDataset(args.train_img_dir, args.train_label_path, hyp, True)
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=hyp['batch_size'],
+                                  num_workers=hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
 
-            if epoch >= self.hyp['close_affine']:
-                self.train_dataloader.dataset.hyp['affine'] = False
+    val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, hyp, False)
+    val_dataloader = DataLoader(dataset=val_dataset, batch_size=hyp['batch_size'],
+                                num_workers=hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
 
-            record_loss = None
-            self.optimizer.zero_grad()
-            pbar = tqdm(self.train_dataloader, desc="Epoch {}".format(epoch + 1))
-            for index, (imgs, img_sizes, labels) in enumerate(pbar):
-                # warmup
-                count = index + self.num_batches * epoch
-                if count <= self.warmup_max:
-                    x_in = [0, self.warmup_max]
-                    y_in = [1, self.hyp['num_batch_size'] / self.hyp['batch_size']]
-                    self.accumulate = max(1, np.interp(count, x_in, y_in).round())
+    start_epoch = 0
+    accumulate = max(round(hyp['total_batch_size'] / hyp['batch_size']), 1)
+    warmup_max = max(round(hyp['warmup_epoch'] * len(train_dataloader)), 100)
 
-                    for i, param in enumerate(self.optimizer.param_groups):
-                        # bias lr falls from 0.1 to lr, all other lrs rise from 0.0 to lr
-                        y_in = [self.hyp['warmup_bias_lr'] if i == 0 else 0.0, param['initial_lr'] * self.lr_fun(epoch)]
-                        param['lr'] = np.interp(count, x_in, y_in)
+    # resume train
+    if args.log_dir:
+        start_epoch = resume_record(model, ema, optimizer, scheduler, stopper, args.log_dir)
 
-                        if 'momentum' in param:
-                            y_in = [self.hyp['warmup_momentum'], self.hyp['momentum']]
-                            param['momentum'] = np.interp(count, x_in, y_in)
+    # build log_dir
+    else:
+        os.makedirs('../log/train', exist_ok=True)
+        ord = max([int(x[5:]) for x in os.listdir('../log/train')]) + 1 if len(os.listdir('../log/train')) else 1
+        args.log_dir = os.path.join('../log/train/train' + str(ord))
+        os.makedirs(args.log_dir, exist_ok=True)
+        os.makedirs(os.path.join(args.log_dir, 'weight'), exist_ok=True)
+        os.makedirs(os.path.join(args.log_dir, 'sample'), exist_ok=True)
 
-                # forward
-                with torch.cuda.amp.autocast(self.amp):
-                    imgs = imgs.to(self.device, non_blocking=True).float() / 255
-                    pred_box, pred_cls, pred_dist, grid, grid_stride = self.model(imgs)
+    # plot labels
+    plot_labels(train_dataset.labels, model.anchor.cls, os.path.join(args.log_dir, 'labels.jpg'))
 
-                    loss, loss_items = self.loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
+    # do train
+    last_step = -1
+    for epoch in range(start_epoch, hyp['epochs']):
+        if epoch >= hyp['close_mosaic']:
+            hyp['mosaic'] = False
 
-                    record_loss = (record_loss * index + loss_items) / (
-                            index + 1) if record_loss is not None else loss_items
+        if epoch >= hyp['close_affine']:
+            hyp['affine'] = False
 
-                # backward
-                self.scaler.scale(loss).backward()
+        loss_mean = None
+        optimizer.zero_grad()
+        pbar = tqdm(train_dataloader, desc="Epoch {}".format(epoch + 1))
+        for index, (imgs, img_sizes, labels) in enumerate(pbar):
+            # sample plot images
+            if index < 5:
+                plot_images(imgs, labels, os.path.join(args.log_dir, f'sample/img_{index + 1}.jpg'))
 
-                if count - last_step >= self.accumulate:
-                    # optimizer step
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad()
+            # warmup
+            count = index + len(train_dataloader) * epoch
+            if count <= warmup_max:
+                x_in = [0, warmup_max]
+                y_in = [1, hyp['total_batch_size'] / hyp['batch_size']]
+                accumulate = max(1, np.interp(count, x_in, y_in).round())
 
-                    # ema step
-                    self.ema.update(self.model)
+                for i, param in enumerate(optimizer.param_groups):
+                    # bias lr falls from 0.1 to lr, all other lrs rise from 0.0 to lr
+                    y_in = [hyp['warmup_bias_lr'] if i == 0 else 0.0, param['initial_lr'] * lr_fun(epoch)]
+                    param['lr'] = np.interp(count, x_in, y_in)
 
-                    last_step = count
+                    if 'momentum' in param:
+                        y_in = [hyp['warmup_momentum'], hyp['momentum']]
+                        param['momentum'] = np.interp(count, x_in, y_in)
 
-                # log
-                memory = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-                pbar.set_description(
-                    ('%12s' * (4 + record_loss.shape[0])) %
-                    (f"{epoch + 1}/{self.hyp['epochs']}", memory, *record_loss, labels.shape[0], self.hyp['shape']))
+            # forward
+            with torch.cuda.amp.autocast(enabled=device != 'cpu'):
+                imgs = imgs.to(device, non_blocking=True).float() / 255
+                pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
 
-            # scheduler step
-            self.scheduler.step()
+                loss, loss_items = loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
 
-            # validation
-            metric = valid(self.val_dataloader, self.ema.model, self.hyp, self.device, True)
+                loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
-            # early stopping
-            stop = self.stopper(epoch, metric['fitness'])
+            # backward
+            scaler.scale(loss).backward()
+            if count - last_step >= accumulate:
+                # optimizer step
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
 
-            # save train
-            self.save_train(epoch)
+                # ema step
+                ema.update(model)
 
-            if stop:
-                valid(self.val_dataloader, self.ema.model, self.hyp, self.device, False)
-                break
+                last_step = count
+
+            # log
+            loss_mean = [round(x, 4) for x in loss_items.tolist()]
+
+            pbar.set_description('%12s' * (4 + loss_mean.shape[0]) % (
+                f"{epoch + 1}/{hyp['epochs']}",
+                f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G',
+                *loss_mean, labels.shape[0], hyp['shape']
+            ))
+
+        # scheduler step
+        scheduler.step()
+
+        # valid
+        metric = valid(val_dataloader, ema.model, hyp, device, True)
+
+        # early stopping
+        stop, best_pth = stopper(epoch, metric['fitness'])
+
+        # save train
+        metric = {**dict(zip(['train/' + x for x in loss_fun.names], loss_mean)),
+                  **metric,
+                  **{f'lr/pg{i}': x['lr'] for i, x in enumerate(optimizer.param_groups)},
+                  **{'ema/decay': round(ema.decay, 4)}}
+        save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, args.log_dir)
+
+        if stop:
+            valid(val_dataloader, ema.model, hyp, device, False)
+            break
 
 
 if __name__ == "__main__":
@@ -282,5 +307,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    train = Train(args, device)
-    train.exec_train()
+    train(args, device)

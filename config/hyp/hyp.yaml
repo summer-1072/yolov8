@@ -23,8 +23,7 @@ warmup_epoch: 3
 warmup_bias_lr: 0.1
 warmup_momentum: 0.8
 
-
-num_batch_size: 64
+total_batch_size: 64
 batch_size: 8
 epochs: 100
 njobs: 1
