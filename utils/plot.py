@@ -3,11 +3,10 @@ import math
 import torch
 import numpy as np
 from util import color
-from collections import Counter
 import matplotlib.pyplot as plt
 
 
-def plot_images(imgs, labels, file, max_shape=(2880, 3840), max_subplots=16):
+def plot_images(imgs, labels, file_path, max_shape=(2880, 3840), max_subplots=16):
     if isinstance(imgs, torch.Tensor):
         imgs = imgs.cpu().float().numpy()
 
@@ -20,8 +19,6 @@ def plot_images(imgs, labels, file, max_shape=(2880, 3840), max_subplots=16):
     B, C, H, W = imgs.shape
     B = min(B, max_subplots)
     num = np.ceil(B ** 0.5)
-
-    labels[:, 2:6] = scale_offset(labels[:, 2:6], W, H)
 
     img_mosaic = np.full((int(num * H), int(num * W), 3), 0, dtype=np.uint8)
     for index, img in enumerate(imgs):
@@ -46,41 +43,42 @@ def plot_images(imgs, labels, file, max_shape=(2880, 3840), max_subplots=16):
         W = math.ceil(ratio * W)
         img_mosaic = cv2.resize(img_mosaic, tuple(int(x * num) for x in (W, H)), cv2.INTER_LINEAR)
 
-    cv2.imwrite(file, img_mosaic)
+    cv2.imwrite(file_path, img_mosaic)
 
 
 def plot_labels(train_labels, val_labels, cls, file_path):
-    indices = []
-    centers = []
-    whs = []
+    train_labels = np.concatenate(train_labels, axis=0)
+    val_labels = np.concatenate(val_labels, axis=0)
 
-    for label in labels:
-        indices.extend([int(x) for x in label[:, 0].tolist()])
-        centers.extend(label[:, 1:3].tolist())
-        whs.extend(label[:, 3:5].tolist())
+    train_cls, train_count = np.unique(train_labels[:, 0], return_counts=True)
+    val_cls, val_count = np.unique(val_labels[:, 0], return_counts=True)
 
-    count = dict(Counter(indices))
-    t_indices = sorted(count.items(), key=lambda x: x[0])
-    t_data = [[cls[x[0]], x[1]] for x in t_indices]
+    plt.figure(figsize=(12, 12))
+    plt.subplots_adjust(top=0.95, bottom=0.05, left=0.05, right=0.95, hspace=0.25, wspace=0.25)
 
-    plt.figure(figsize=(15, 9))
-    plt.subplot(2, 1, 1)
-    plt.title('target', fontsize=12)
-    for k, v in t_data:
-        bar = plt.bar(k, v, log=True)
-        plt.bar_label(bar, fontsize=8)
+    plt.subplot(3, 1, 1)
+    plt.title('train cls', fontsize=12)
+    for i in range(len(train_cls)):
+        bar = plt.bar(cls[int(train_cls[i])], train_count[int(train_cls[i])], log=True)
+        plt.bar_label(bar, fontsize=6)
 
-    plt.subplot(2, 2, 3)
-    plt.title('center', fontsize=12)
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.scatter([x[0] for x in centers], [x[1] for x in centers], s=0.05)
+    plt.subplot(3, 1, 2)
+    plt.title('val cls', fontsize=12)
+    for i in range(len(val_cls)):
+        bar = plt.bar(cls[int(val_cls[i])], val_count[int(val_cls[i])], log=True)
+        plt.bar_label(bar, fontsize=6)
 
-    plt.subplot(2, 2, 4)
-    plt.title('wh', fontsize=12)
+    plt.subplot(3, 2, 5)
+    plt.title('train box', fontsize=12)
     plt.xlabel('w')
     plt.ylabel('h')
-    plt.scatter([x[0] for x in whs], [x[1] for x in whs], s=0.05)
+    plt.scatter(train_labels[:, 3] - train_labels[:, 1], train_labels[:, 4] - train_labels[:, 2], s=0.5)
+
+    plt.subplot(3, 2, 6)
+    plt.title('val box', fontsize=12)
+    plt.scatter(val_labels[:, 3] - val_labels[:, 1], val_labels[:, 4] - val_labels[:, 2], s=0.5)
+    plt.xlabel('w')
+    plt.ylabel('h')
 
     plt.savefig(file_path)
 

@@ -100,7 +100,7 @@ def save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, log_dir
     param = {'start_epoch': epoch, 'updates': ema.updates,
              'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
 
-    with open(os.path.join(log_dir, 'train.json'), 'w') as f:
+    with open(os.path.join(log_dir, 'bdd100k_labels_images_train.json'), 'w') as f:
         json.dump(param, f)
 
     torch.save(model, os.path.join(log_dir, 'weight', 'model.pth'))
@@ -122,7 +122,7 @@ def save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, log_dir
 
 
 def resume_record(model, ema, optimizer, scheduler, stopper, log_dir):
-    with open(os.path.join(log_dir, 'train.json'), 'r') as f:
+    with open(os.path.join(log_dir, 'bdd100k_labels_images_train.json'), 'r') as f:
         param = json.load(f)
 
     start_epoch = param['start_epoch']
@@ -199,7 +199,7 @@ def train(args, device):
         os.makedirs(os.path.join(args.log_dir, 'sample'), exist_ok=True)
 
     # plot labels
-    plot_labels(train_dataset.labels, model.anchor.cls, os.path.join(args.log_dir, 'labels.jpg'))
+    plot_labels(train_dataset.labels, val_dataset.labels, model.anchor.cls, os.path.join(args.log_dir, 'labels.jpg'))
 
     # do train
     last_step = -1
@@ -259,12 +259,12 @@ def train(args, device):
                 last_step = count
 
             # log
-            loss_mean = [round(x, 4) for x in loss_items.tolist()]
+            loss_record = [round(x, 4) for x in loss_items.tolist()]
 
-            pbar.set_description('%12s' * (4 + loss_mean.shape[0]) % (
+            pbar.set_description('%12s' * (4 + len(loss_record)) % (
                 f"{epoch + 1}/{hyp['epochs']}",
                 f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G',
-                *loss_mean, labels.shape[0], hyp['shape']
+                *loss_record, labels.shape[0], hyp['shape']
             ))
 
         # scheduler step
