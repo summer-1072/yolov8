@@ -165,7 +165,8 @@ class LossFun:
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
         target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box.detach(),
-                                                                            pred_cls.detach(), grid, grid_stride)
+                                                                            pred_cls.sigmoid().detach(), grid,
+                                                                            grid_stride)
 
         score_sum = max(target_score.sum(), 1)
 

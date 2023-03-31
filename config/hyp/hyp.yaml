@@ -1,4 +1,4 @@
-shape: [ 640, 384 ]
+shape: [ 384, 640 ]
 
 half: False
 
@@ -24,8 +24,8 @@ warmup_bias_lr: 0.1
 warmup_momentum: 0.8
 
 total_batch_size: 64
-batch_size: 8
-epochs: 100
+batch_size: 16
+epochs: 200
 njobs: 1
 
 close_mosaic: 10

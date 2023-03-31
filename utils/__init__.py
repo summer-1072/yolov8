@@ -269,13 +269,13 @@ class TaskAlignedAssigner(nn.Module):
 
 
 labels = torch.tensor([
-    [[0, 0.1, 0.1, 0.6, 0.6],
-     [1, 0.4, 0.4, 0.9, 0.9],
+    [[0, 1.2, 1.2, 7.2, 7.2],
+     [1, 4.8, 4.8, 10.8, 10.8],
      [0, 0.0, 0.0, 0.0, 0.0]],
 
-    [[0, 0.1, 0.4, 0.3, 0.6],
-     [1, 0.4, 0.1, 0.9, 0.5],
-     [2, 0.1, 0.7, 0.9, 0.9]]
+    [[0, 1.2, 4.8, 3.6, 7.],
+     [1, 4.8, 1.2, 10.8, 6],
+     [2, 1.2, 8.4, 10.8, 10.8]]
 ])
 
 pred_box = torch.tensor([
@@ -345,7 +345,7 @@ img_size = torch.tensor([12, 12])
 
 gt_labels, gt_bboxes = labels.split((1, 4), 2)
 
-gt_bboxes = gt_bboxes * img_size[[1, 0, 1, 0]]
+# gt_bboxes = gt_bboxes * img_size[[1, 0, 1, 0]]
 
 mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)
 

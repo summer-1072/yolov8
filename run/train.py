@@ -1,4 +1,5 @@
 import os
+import sys
 import yaml
 import json
 import math
@@ -173,11 +174,11 @@ def train(args, device):
     scaler = amp.GradScaler(enabled=device != 'cpu')
 
     # dataset
-    train_dataset = LoadDataset(args.train_img_dir, args.train_label_path, hyp, True)
+    train_dataset = LoadDataset(args.train_img_dir, args.train_label_path, hyp, model.anchor.strides[-1], True)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=hyp['batch_size'],
                                   num_workers=hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
 
-    val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, hyp, False)
+    val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, hyp, model.anchor.strides[-1], False)
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=hyp['batch_size'],
                                 num_workers=hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
 
@@ -210,12 +211,13 @@ def train(args, device):
         if epoch >= hyp['close_affine']:
             hyp['affine'] = False
 
+        print('%12s' * (4 + len(loss_fun.names)) % ('epoch', 'memory', *loss_fun.names, 'instances', 'shape'))
         loss_mean = None
         optimizer.zero_grad()
-        pbar = tqdm(train_dataloader, desc="Epoch {}".format(epoch + 1))
+        pbar = tqdm(train_dataloader, file=sys.stdout)
         for index, (imgs, img_sizes, labels) in enumerate(pbar):
             # sample plot images
-            if index < 5:
+            if index < 10:
                 plot_images(imgs, labels, os.path.join(args.log_dir, f'sample/img_{index + 1}.jpg'))
 
             # warmup
@@ -259,7 +261,7 @@ def train(args, device):
                 last_step = count
 
             # log
-            loss_record = [round(x, 4) for x in loss_items.tolist()]
+            loss_record = [round(x, 4) for x in loss_mean.tolist()]
 
             pbar.set_description('%12s' * (4 + len(loss_record)) % (
                 f"{epoch + 1}/{hyp['epochs']}",

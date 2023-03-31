@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from box import rescale_box, bbox_iou
+from box import inv_letterbox, bbox_iou
 
 
 def smooth(x, f=0.05):
@@ -36,8 +36,8 @@ class Metric:
                     self.status.append((matrix, *torch.zeros((2, 0), device=self.device), label[:, 1]))
 
                 else:
-                    pred[:, :4] = rescale_box(img_size[0], img_size[1], pred[:, :4])
-                    label[:, 2:] = rescale_box(img_size[0], img_size[1], label[:, 2:])
+                    pred[:, :4] = inv_letterbox(pred[:, :4], img_size[0], img_size[1])
+                    label[:, 2:] = inv_letterbox(label[:, 2:], img_size[0], img_size[1])
 
                     iou = bbox_iou(label[:, 2:].unsqueeze(1), pred[:, :4].unsqueeze(0), 'IoU').squeeze(2).clamp(0)
                     cls = label[:, 1:2] == pred[:, 5]
@@ -112,8 +112,9 @@ class Metric:
 
     def overviews(self):
         print(('%22s' + '%12s' * 6) % ('images', 'class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))
-        print(('%22s' + '%12s' * 6) % (self.num_img, len(self.cls), sum(self.count), self.metrics['p'],
-                                       self.metrics['r'], self.metrics['mAP50'], self.metrics['mAP50_95']))
+        print(('%22s' + '%12s' * 6) % (self.num_img, len(self.cls), sum(self.count),
+                                       self.metrics['metric/precision'], self.metrics['metric/recall'],
+                                       self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95']))
 
     def details(self):
         print(('%22s' + '%12s' * 5) % ('class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))

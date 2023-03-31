@@ -8,7 +8,7 @@ from metric import Metric
 from util import time_sync
 from dataset import LoadDataset
 from torch.utils.data import DataLoader
-from box import non_max_suppression, rescale_box, bbox_iou
+from box import non_max_suppression, inv_letterbox, bbox_iou
 
 
 def valid(dataloader, model, hyp, device, training):
@@ -139,7 +139,7 @@ if __name__ == "__main__":
 
     device = 'cpu'
 
-    loss = Loss(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], 3, device)
+    loss_fun = LossFun(hyp['alpha'], hyp['beta'], hyp['topk'], hyp['box_w'], hyp['cls_w'], hyp['dfl_w'], 3, device)
 
     metric = Metric(['car', 'person', 'bike'], device)
 
@@ -147,7 +147,9 @@ if __name__ == "__main__":
 
     loss_items = torch.zeros(3, device=device)
 
-    loss_items += loss(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+    loss_items += loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+
+    print(loss_items)
 
     preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])

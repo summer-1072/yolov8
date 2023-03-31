@@ -76,13 +76,7 @@ def letterbox(img, new_shape, stride):
     return img, img.shape[:2], (dy, dx)
 
 
-def scale_box(box, h, w, dy, dx, dim=-1):
-    x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-
-    return np.stack((w * x1 + dx, h * y1 + dy, w * x2 + dx, h * y2 + dy), dim)
-
-
-def rescale_box(shape0, shape1, box):
+def inv_letterbox(box, shape0, shape1):
     gain = min(shape1[0] / shape0[0], shape1[1] / shape0[1])
     pad = (shape1[1] - shape0[1] * gain) / 2, (shape1[0] - shape0[0] * gain) / 2
 
@@ -96,6 +90,13 @@ def rescale_box(shape0, shape1, box):
     box[:, 3].clamp_(0, shape0[0])
 
     return box
+
+
+def scale_offset_box(box, shape, offset, dim=-1):
+    x1, y1, x2, y2 = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
+
+    return np.stack((shape[1] * x1 + offset[1], shape[0] * y1 + offset[0],
+                     shape[1] * x2 + offset[1], shape[0] * y2 + offset[0]), dim)
 
 
 def non_max_suppression(preds, conf_t, multi_label, max_box, max_wh, iou_t, max_det, merge):

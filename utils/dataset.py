@@ -7,8 +7,9 @@ import random
 import imagesize
 import numpy as np
 from tqdm import tqdm
+from copy import deepcopy
 from torch.utils.data import Dataset
-from box import letterbox, scale_box
+from box import letterbox, scale_offset_box
 
 
 def build_labels(input_file, output_file, image_dir, cls):
@@ -90,10 +91,10 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]
 
         # mosaic labels
-        dy, dx = y1a - y1b, x1a - x1b
+        offset = (y1a - y1b, x1a - x1b)
         img_labels = labels[index].copy()
         if len(img_labels):
-            img_labels[:, 1:5] = scale_box(img_labels[:, 1:5], h, w, dy, dx)
+            img_labels[:, 1:5] = scale_offset_box(img_labels[:, 1:5], img.shape[:2], offset)
             img4_labels.append(img_labels)
 
     img4_labels = np.concatenate(img4_labels, 0)
@@ -166,7 +167,7 @@ def flip_up_down(img, labels):
     h, w = img.shape[:2]
 
     if len(labels):
-        y1, y2 = labels[:, 2], labels[:, 4]
+        y1, y2 = deepcopy(labels[:, 2]), deepcopy(labels[:, 4])
         labels[:, 2] = h - y2
         labels[:, 4] = h - y1
 
@@ -178,7 +179,7 @@ def flip_left_right(img, labels):
     h, w = img.shape[:2]
 
     if len(labels):
-        x1, x2 = labels[:, 1], labels[:, 3]
+        x1, x2 = deepcopy(labels[:, 1]), deepcopy(labels[:, 3])
         labels[:, 1] = w - x2
         labels[:, 3] = w - x1
 
@@ -196,9 +197,10 @@ def check_labels(labels, box_t, wh_rt, eps=1e-3):
 
 
 class LoadDataset(Dataset):
-    def __init__(self, img_dir, label_file, hyp, augment):
+    def __init__(self, img_dir, label_file, hyp, stride, augment):
         self.img_dir = img_dir
         self.hyp = hyp
+        self.stride = stride
         self.augment = augment
         self.indices, self.imgs, self.labels = read_labels(label_file)
 
@@ -210,12 +212,12 @@ class LoadDataset(Dataset):
         else:
             img = cv2.imread(os.path.join(self.img_dir, self.imgs[index]))
             img_size0 = img.shape[:2]
-            img, (h, w), (dy, dx) = letterbox(img, self.hyp['shape'], self.hyp['stride'])
+            img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
             img_size1 = img.shape[:2]
             img_size = [img_size0, img_size1]
             labels = self.labels[index].copy()
             if len(labels):
-                labels[:, 1:5] = scale_box(labels[:, 1:5], h, w, dy, dx)
+                labels[:, 1:5] = scale_offset_box(labels[:, 1:5], shape, offset)
 
         if self.augment and self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])

@@ -7,7 +7,7 @@ import numpy as np
 from tools import load_model
 from util import time_sync, color
 from collections import Counter
-from box import letterbox, rescale_box, non_max_suppression
+from box import letterbox, inv_letterbox, non_max_suppression
 
 
 def save_results(img, pred, cls, file):
@@ -83,7 +83,7 @@ def detect(args, device):
         pred = pred[0]
 
         if pred.shape[0] > 0:
-            pred[:, :4] = rescale_box(img0.shape[:2], img1.shape[2:], pred[:, :4])
+            pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], img1.shape[2:])
 
         t4 = time_sync()
         info = save_results(img0, pred, cls, os.path.join(log_dir, file))
