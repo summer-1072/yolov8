@@ -6,6 +6,7 @@ import math
 import torch
 import argparse
 import numpy as np
+import pandas as pd
 from torch import nn
 from tqdm import tqdm
 from valid import valid
@@ -97,11 +98,11 @@ def build_scheduler(optimizer, one_cycle, lrf, epochs):
     return lr_fun, scheduler
 
 
-def save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, log_dir):
+def save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, log_dir):
     param = {'start_epoch': epoch, 'updates': ema.updates,
              'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
 
-    with open(os.path.join(log_dir, 'bdd100k_labels_images_train.json'), 'w') as f:
+    with open(os.path.join(log_dir, 'param.json'), 'w') as f:
         json.dump(param, f)
 
     torch.save(model, os.path.join(log_dir, 'weight', 'model.pth'))
@@ -111,19 +112,16 @@ def save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, log_dir
     if best_pth:
         torch.save(ema.model, os.path.join(log_dir, 'weight', 'best.pth'))
 
-    head = (' ' * 12).join(['epoch'] + list(metric.keys()))
-    line = (' ' * 12).join([str(x) for x in [epoch + 1] + list(metric.values())])
-    if os.path.exists(os.path.join(log_dir, 'log.txt')):
-        with open(os.path.join(log_dir, 'log.txt'), 'a+') as f:
-            f.write(line + '\n')
+    log = pd.DataFrame(dict(zip(['epoch'] + list(metrics.keys()), [epoch + 1] + list(metrics.values()))), index=[epoch])
+    if os.path.exists(os.path.join(log_dir, 'log.csv')):
+        log.to_csv(os.path.join(log_dir, 'log.csv'), mode='a', index=False)
+
     else:
-        with open(os.path.join(log_dir, 'log.txt'), 'a+') as f:
-            f.write(head + '\n')
-            f.write(line + '\n')
+        log.to_csv(os.path.join(log_dir, 'log.csv'), mode='w', index=False)
 
 
 def resume_record(model, ema, optimizer, scheduler, stopper, log_dir):
-    with open(os.path.join(log_dir, 'bdd100k_labels_images_train.json'), 'r') as f:
+    with open(os.path.join(log_dir, 'param.json'), 'r') as f:
         param = json.load(f)
 
     start_epoch = param['start_epoch']
@@ -150,9 +148,8 @@ def train(args, device):
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.fused, args.weight_path, True)
+    model = load_model(args.model_path, cls, args.weight_path, args.fused)
     model.to(device)
-    model.train()
 
     # ema
     ema = EMA(model, hyp['ema_decay'], hyp['tau'])
@@ -211,13 +208,15 @@ def train(args, device):
         if epoch >= hyp['close_affine']:
             hyp['affine'] = False
 
+        model.train()
+
         print('%12s' * (4 + len(loss_fun.names)) % ('epoch', 'memory', *loss_fun.names, 'instances', 'shape'))
         loss_mean = None
         optimizer.zero_grad()
         pbar = tqdm(train_dataloader, file=sys.stdout)
         for index, (imgs, img_sizes, labels) in enumerate(pbar):
             # sample plot images
-            if index < 10:
+            if index < 5:
                 plot_images(imgs, labels, os.path.join(args.log_dir, f'sample/img_{index + 1}.jpg'))
 
             # warmup
@@ -276,14 +275,16 @@ def train(args, device):
         metric = valid(val_dataloader, ema.model, hyp, device, True)
 
         # early stopping
-        stop, best_pth = stopper(epoch, metric['fitness'])
+        stop, best_pth = stopper(epoch, metric['metric/fitness'])
 
         # save train
-        metric = {**dict(zip(['train/' + x for x in loss_fun.names], loss_mean)),
-                  **metric,
-                  **{f'lr/pg{i}': x['lr'] for i, x in enumerate(optimizer.param_groups)},
-                  **{'ema/decay': round(ema.decay, 4)}}
-        save_record(epoch, model, ema, optimizer, stopper, best_pth, metric, args.log_dir)
+        loss_mean = [round(x, 4) for x in (loss_mean / len(train_dataloader)).tolist()]
+
+        metrics = {**dict(zip(['train/' + x for x in loss_fun.names], loss_mean)), **metric,
+                   **{f'lr/pg{i}': round(x['lr'], 4) for i, x in enumerate(optimizer.param_groups)},
+                   **{'ema/decay': round(ema.decay, 4)}}
+
+        save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, args.log_dir)
 
         if stop:
             valid(val_dataloader, ema.model, hyp, device, False)
@@ -292,19 +293,17 @@ def train(args, device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train_img_dir', default='../dataset/bdd100k/images/train')
-    parser.add_argument('--train_label_path', default='../dataset/bdd100k/labels/train.txt')
-    parser.add_argument('--val_img_dir', default='../dataset/bdd100k/images/val')
-    parser.add_argument('--val_label_path', default='../dataset/bdd100k/labels/val.txt')
-    parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
+    parser.add_argument('--train_img_dir', default='../dataset/bdd10k/images/train')
+    parser.add_argument('--train_label_path', default='../dataset/bdd10k/labels/train.txt')
+    parser.add_argument('--val_img_dir', default='../dataset/bdd10k/images/val')
+    parser.add_argument('--val_label_path', default='../dataset/bdd10k/labels/val.txt')
+    parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8x.yaml')
-    parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
-    parser.add_argument('--training', default=True)
-    parser.add_argument('--fused', default=True)
+    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
+    parser.add_argument('--weight_path', default='')
+    parser.add_argument('--fused', default=False)
 
-    parser.add_argument('--pretrain_dir', default='')
     parser.add_argument('--log_dir', default='')
     args = parser.parse_args()
 

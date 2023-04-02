@@ -3,51 +3,15 @@ from modules import *
 from yolo import YOLO
 
 
-# 权重参数转移函数
-def transform_weight(model, pretrain):
-    for m in model.modules():
-        if isinstance(m, Conv) and hasattr(m, 'bn'):
-            conv = m.conv
-            conv.bias = torch.nn.Parameter(torch.zeros(conv.weight.size(0), device=conv.weight.device))
-            delattr(m, 'bn')
-            m.forward = m.forward_fuse
+def load_model(model_path, cls, weight_path, fused):
+    config = yaml.safe_load(open(model_path, encoding="utf-8"))
+    model = YOLO(config['network'], config['reg_max'], config['chs'], config['strides'], cls)
 
-    model_dict = model.state_dict()
-    pret_dict = pretrain.state_dict()
-    model_list = [[k, v] for k, v in model_dict.items()]
-    pret_list = [[k, v] for k, v in pret_dict.items()]
+    if weight_path:
+        weight = torch.load(weight_path)
 
-    assert len(model_list) == len(pret_list)
-
-    for i in range(len(model_list)):
-        if model_list[i][1].shape == pret_list[i][1].shape:
-            model_list[i][1] = pret_list[i][1]
-        else:
-            print('layers miss, model layer: %s,  pret layer: %s' % (model_list[i][0], pret_list[i][0]))
-
-    for k, v in model_list:
-        model_dict[k] = v
-
-    model.load_state_dict(model_dict)
-
-
-def load_weight(model, weight_path, fused, training):
-    weight_dict = torch.load(weight_path)['model']
-
-    if fused:
-        if training:
-            model_dict = model.state_dict()
-            for k0 in weight_dict.keys():
-                # conv: weight, bn: bias
-                k1 = k0 if k0 in model_dict else k0.replace('conv.', 'bn.')
-
-                if model_dict[k1].shape == weight_dict[k0].shape:
-                    model_dict[k1] = weight_dict[k0]
-
-            model.load_state_dict(model_dict)
-
-        else:
-            # pred -> fuse conv and bn
+        if fused:
+            # fuse conv and bn
             for m in model.modules():
                 if isinstance(m, Conv) and hasattr(m, 'bn'):
                     conv = m.conv
@@ -55,18 +19,7 @@ def load_weight(model, weight_path, fused, training):
                     delattr(m, 'bn')
                     m.forward = m.forward_fuse
 
-            model.load_state_dict(weight_dict)
-
-    else:
-        model.load_state_dict(weight_dict)
-
-
-def load_model(model_path, cls, fused, weight_path, training):
-    config = yaml.safe_load(open(model_path, encoding="utf-8"))
-    model = YOLO(config['network'], config['reg_max'], config['chs'], config['strides'], cls, training)
-
-    if weight_path:
-        load_weight(model, weight_path, fused, training)
+        model.load_state_dict(weight.state_dict())
 
     return model
 

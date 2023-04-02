@@ -24,10 +24,16 @@ class Metric:
         self.status = []
         self.iouv = torch.linspace(0.5, 0.95, 10)
 
+        self.desc_head = ('%12s' * 7) % ('images', 'class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95')
+        self.desc_body = ('%12s' * 7) % ('none', 'none', 'none', 'none', 'none', 'none', 'none')
+
     def update(self, labels, preds, img_sizes):
         for index, pred in enumerate(preds):
             img_size = img_sizes[index]
             label = labels[labels[:, 0] == index]
+
+            pred = pred.detach()
+            label = label.detach()
 
             matrix = torch.zeros(pred.shape[0], self.iouv.shape[0], dtype=torch.bool, device=self.device)
             self.num_img += 1
@@ -105,19 +111,17 @@ class Metric:
         mAP50_95 = round(AP.mean(), 4) if len(AP) else 0.0
 
         weight = [0.0, 0.0, 0.1, 0.9]  # [P, R, mAP@0.5, mAP@0.5:0.95]
-        fitness = (np.array([p, r, mAP50, mAP50_95]) * weight).sum()
+        fitness = round((np.array([p, r, mAP50, mAP50_95]) * weight).sum(), 4)
 
         self.metrics = {'metric/precision': p, 'metric/recall': r,
                         'metric/mAP50': mAP50, 'metric/mAP50-95': mAP50_95, 'metric/fitness': fitness}
 
-    def overviews(self):
-        print(('%22s' + '%12s' * 6) % ('images', 'class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))
-        print(('%22s' + '%12s' * 6) % (self.num_img, len(self.cls), sum(self.count),
-                                       self.metrics['metric/precision'], self.metrics['metric/recall'],
-                                       self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95']))
+        self.desc_body = ('%12s' * 7) % (self.num_img, len(self.cls), sum(self.count),
+                                         self.metrics['metric/precision'], self.metrics['metric/recall'],
+                                         self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95'])
 
-    def details(self):
-        print(('%22s' + '%12s' * 5) % ('class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))
+    def print_details(self):
+        print(('%12s' * 6) % ('class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))
         for i in range(len(self.cls)):
             p = round(self.indices['P'][i], 4)
             r = round(self.indices['R'][i], 4)

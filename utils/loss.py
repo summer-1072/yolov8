@@ -38,7 +38,7 @@ class BoxLoss(nn.Module):
 
 
 class LossFun:
-    def __init__(self, alpha, beta, topk, box_w, cls_w, dfl_w, reg_max, device, eps=1e-8):
+    def __init__(self, alpha, beta, topk, box_w, cls_w, dfl_w, reg_max, device, eps=1e-9):
         self.alpha = alpha
         self.beta = beta
         self.topk = topk
@@ -97,7 +97,8 @@ class LossFun:
 
         # top_pos
         match_metric = metric * match_pos
-        top_metric, top_pos = torch.topk(match_metric, self.topk, 2)
+        top_metric, top_pos = torch.topk(match_metric, self.topk, dim=2, largest=True)
+
         if len(mask):
             top_mask = mask.repeat([1, 1, self.topk]).bool()
         else:

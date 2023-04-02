@@ -2,7 +2,7 @@ from modules import *
 
 
 class YOLO(nn.Module):
-    def __init__(self, network, reg_max, chs, strides, cls, training):
+    def __init__(self, network, reg_max, chs, strides, cls):
         super().__init__()
 
         # BackBone
@@ -34,7 +34,7 @@ class YOLO(nn.Module):
             nn.Sequential(Conv(ch, ch1, 3, 1), Conv(ch1, ch1, 3, 1), nn.Conv2d(ch1, reg_max * 4, 1)) for ch in chs)
         self.conv2 = nn.ModuleList(
             nn.Sequential(Conv(ch, ch2, 3, 1), Conv(ch2, ch2, 3, 1), nn.Conv2d(ch2, len(cls), 1)) for ch in chs)
-        self.anchor = Anchor(cls, reg_max, strides, training)
+        self.anchor = Anchor(cls, reg_max, strides)
 
     def forward(self, x):
         # BackBone

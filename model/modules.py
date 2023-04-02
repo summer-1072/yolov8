@@ -81,13 +81,12 @@ class SPPF(nn.Module):
 
 
 class Anchor(nn.Module):
-    def __init__(self, cls, reg_max, strides, training):
+    def __init__(self, cls, reg_max, strides):
         super().__init__()
 
         self.cls = cls
         self.reg_max = reg_max
         self.strides = strides
-        self.training = training
         self.num_out = reg_max * 4 + len(cls)
         self.shape = None
         self.grid = torch.empty(0)
@@ -126,8 +125,4 @@ class Anchor(nn.Module):
 
         box = gap2box(gap, self.grid)
 
-        if not self.training:
-            return torch.cat((box * self.grid_stride, cls.sigmoid()), 2)
-
-        else:
-            return box, cls, dist, self.grid, self.grid_stride
+        return box, cls, dist, self.grid, self.grid_stride

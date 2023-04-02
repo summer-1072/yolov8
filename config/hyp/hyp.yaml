@@ -1,6 +1,32 @@
+# ------------- predict -------------
+# image size
 shape: [ 384, 640 ]
 
+# non-maximum suppression
+conf_t: 0.25
+multi_label: False
+max_box: 30000
+max_wh: 7680
+iou_t: 0.7
+max_det: 300
+merge: False
+
+# semi precision
 half: False
+
+# ------------- valid -------------
+# loss
+alpha: 0.5
+beta: 6.0
+topk: 10
+box_w: 7.5
+cls_w: 0.5
+dfl_w: 1.5
+
+# ------------- train -------------
+# exponention moving average
+ema_decay: 0.9999
+tau: 2000
 
 # optimizer
 optim: Adam
@@ -12,53 +38,34 @@ weight_decay: 0.0005
 one_cycle: True
 lrf: 0.01
 
-# ema
-ema_decay: 0.9999
-tau: 2000
-
 # early stop
 patience: 50
 
-warmup_epoch: 3
+# warmup
+warmup_epoch: 5
 warmup_bias_lr: 0.1
 warmup_momentum: 0.8
 
+# dataloader
 total_batch_size: 64
-batch_size: 16
-epochs: 200
-njobs: 1
+batch_size: 8
+epochs: 300
+njobs: 4
 
-close_mosaic: 10
-close_affine: 10
+# close epoch
+close_mosaic: 150
+close_affine: 150
 
-# loss
-alpha: 1
-beta: 1
-topk: 3
-box_w: 1
-cls_w: 1
-dfl_w: 1
-
-
-# NMS
-conf_t: 0.25
-multi_label: False
-max_box: 30000
-max_wh: 7680
-iou_t: 0.7
-max_det: 300
-merge: False
-
-# 图像增强
-mosaic: True # 是否采用Mosaic
-affine: True # 是否采用仿射变换
-hsv: 0.5 # 随机HSV增强
-flipud: 0 # 随机上下翻转
-fliplr: 0.5 # 随机左右翻转
-scale: 0.5 # 仿射变换：图像尺寸放缩
-translate: 0.1 # 仿射变换：图像平移
-h: 0.015  # HSV：H
-s: 0.7 # HSV：S
-v: 0.4 # HSV：V
-box_t: 5 # 最小检测目标尺寸
-wh_rt: 10 # 目标长宽比过滤阈值
+# image augment
+mosaic: True
+affine: True
+hsv: 0.5
+flipud: 0
+fliplr: 0.5
+scale: 0.5
+translate: 0.1
+h: 0.015
+s: 0.7
+v: 0.4
+box_t: 5
+wh_rt: 10

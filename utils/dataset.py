@@ -18,21 +18,23 @@ def build_labels(input_file, output_file, image_dir, cls):
         lines = json.load(f)
         for index in tqdm(range(len(lines)), desc=f'reading {input_file}, {len(lines)} records'):
             name = lines[index]['name']
-            labels = lines[index]['labels']
-            img_w, img_h = imagesize.get(image_dir + '/' + name)
 
             targets = []
-            for label in labels:
-                category = label['category']
-                if category in cls:
-                    c = cls.index(category)
-                    box2d = label['box2d']
-                    x1 = round(box2d['x1'] / img_w, 4)
-                    y1 = round(box2d['y1'] / img_h, 4)
-                    x2 = round(box2d['x2'] / img_w, 4)
-                    y2 = round(box2d['y2'] / img_h, 4)
+            if 'labels' in lines[index]:
+                labels = lines[index]['labels']
+                img_w, img_h = imagesize.get(image_dir + '/' + name)
 
-                    targets.append(','.join([str(i) for i in [c, x1, y1, x2, y2]]))
+                for label in labels:
+                    category = label['category']
+                    if category in cls:
+                        c = cls.index(category)
+                        box2d = label['box2d']
+                        x1 = round(box2d['x1'] / img_w, 4)
+                        y1 = round(box2d['y1'] / img_h, 4)
+                        x2 = round(box2d['x2'] / img_w, 4)
+                        y2 = round(box2d['y2'] / img_h, 4)
+
+                        targets.append(','.join([str(i) for i in [c, x1, y1, x2, y2]]))
 
             records.append(name + '  ' + '  '.join(targets))
 
@@ -101,7 +103,7 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
 
     img4_labels[:, [1, 3]] = np.clip(img4_labels[:, [1, 3]], 0, 2 * new_shape[1])
     img4_labels[:, [2, 4]] = np.clip(img4_labels[:, [2, 4]], 0, 2 * new_shape[0])
-    img4_labels = img4_labels / 2
+    img4_labels[:, 1:5] = img4_labels[:, 1:5] / 2
 
     img4 = cv2.resize(img4, (new_shape[1], new_shape[0]), cv2.INTER_LINEAR)
 

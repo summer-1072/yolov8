@@ -45,7 +45,7 @@ def detect(args, device):
     half = hyp['half'] & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_path, cls, args.fused, args.weight_path, False)
+    model = load_model(args.model_path, cls, args.weight_path, args.fused)
     model = model.half() if half else model.float()
     model.to(device)
     model.eval()
@@ -74,7 +74,8 @@ def detect(args, device):
         img1 = img1.to(device)
 
         t2 = time_sync()
-        pred = model(img1)
+        pred_box, pred_cls, pred_dist, grid, grid_stride = model(img1)
+        pred = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
 
         t3 = time_sync()
         pred = non_max_suppression(pred, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],

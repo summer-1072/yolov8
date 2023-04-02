@@ -1,5 +1,5 @@
 /.idea/*
-/dataset/bdd100k/*
+/dataset/*
 /log/*
 /config/weight/*
 /model/__pycache__/
