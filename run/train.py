@@ -6,7 +6,6 @@ import math
 import torch
 import argparse
 import numpy as np
-import pandas as pd
 from torch import nn
 from tqdm import tqdm
 from valid import valid
@@ -55,7 +54,7 @@ class EarlyStop:
         stop = epoch - self.best_epoch >= self.patience
 
         if stop:
-            print(f'stop training early at {epoch}th epoch, the best one is {self.best_epoch}th epoch')
+            print(f'stop training early at {epoch}th epoch, the best one is {self.best_epoch}th epoch', file=sys.stderr)
 
         return stop, best_pth
 
@@ -112,12 +111,16 @@ def save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, log_di
     if best_pth:
         torch.save(ema.model, os.path.join(log_dir, 'weight', 'best.pth'))
 
-    log = pd.DataFrame(dict(zip(['epoch'] + list(metrics.keys()), [epoch + 1] + list(metrics.values()))), index=[epoch])
-    if os.path.exists(os.path.join(log_dir, 'log.csv')):
-        log.to_csv(os.path.join(log_dir, 'log.csv'), mode='a', index=False)
+    if os.path.exists(os.path.join(log_dir, 'log.txt')):
+        with open(os.path.join(log_dir, 'log.txt'), 'a+') as f:
+            f.write(
+                (' ' * 6).join([str(epoch + 1).ljust(5)] + [str(v).ljust(len(k)) for k, v in metrics.items()]) + '\n')
 
     else:
-        log.to_csv(os.path.join(log_dir, 'log.csv'), mode='w', index=False)
+        with open(os.path.join(log_dir, 'log.txt'), 'w+') as f:
+            f.write((' ' * 6).join((['epoch'] + list(metrics.keys()))) + '\n')
+            f.write(
+                (' ' * 6).join([str(epoch + 1).ljust(5)] + [str(v).ljust(len(k)) for k, v in metrics.items()]) + '\n')
 
 
 def resume_record(model, ema, optimizer, scheduler, stopper, log_dir):
@@ -210,10 +213,11 @@ def train(args, device):
 
         model.train()
 
-        print('%12s' * (4 + len(loss_fun.names)) % ('epoch', 'memory', *loss_fun.names, 'instances', 'shape'))
+        print('%12s' * (4 + len(loss_fun.names)) % ('epoch', 'memory', *loss_fun.names, 'instances', 'shape'),
+              file=sys.stderr)
         loss_mean = None
         optimizer.zero_grad()
-        pbar = tqdm(train_dataloader, file=sys.stdout)
+        pbar = tqdm(train_dataloader, file=sys.stderr)
         for index, (imgs, img_sizes, labels) in enumerate(pbar):
             # sample plot images
             if index < 5:
@@ -240,7 +244,7 @@ def train(args, device):
                 imgs = imgs.to(device, non_blocking=True).float() / 255
                 pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
 
-                loss, loss_items = loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)
+                loss, loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)
 
                 loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
@@ -261,7 +265,6 @@ def train(args, device):
 
             # log
             loss_record = [round(x, 4) for x in loss_mean.tolist()]
-
             pbar.set_description('%12s' * (4 + len(loss_record)) % (
                 f"{epoch + 1}/{hyp['epochs']}",
                 f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G',
@@ -278,9 +281,8 @@ def train(args, device):
         stop, best_pth = stopper(epoch, metric['metric/fitness'])
 
         # save train
-        loss_mean = [round(x, 4) for x in (loss_mean / len(train_dataloader)).tolist()]
-
-        metrics = {**dict(zip(['train/' + x for x in loss_fun.names], loss_mean)), **metric,
+        loss_record = [round(x, 4) for x in loss_mean.tolist()]
+        metrics = {**dict(zip(['train/' + x for x in loss_fun.names], loss_record)), **metric,
                    **{f'lr/pg{i}': round(x['lr'], 4) for i, x in enumerate(optimizer.param_groups)},
                    **{'ema/decay': round(ema.decay, 4)}}
 

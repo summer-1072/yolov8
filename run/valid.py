@@ -26,7 +26,7 @@ def valid(dataloader, model, hyp, device, training):
                        hyp['cls_w'], hyp['dfl_w'], model.anchor.reg_max, device)
 
     cost = 0
-    pbar = tqdm(dataloader, file=sys.stdout)
+    pbar = tqdm(dataloader, file=sys.stderr)
     for index, (imgs, img_sizes, labels) in enumerate(pbar):
         t1 = time_sync()
 
@@ -43,7 +43,7 @@ def valid(dataloader, model, hyp, device, training):
         t2 = time_sync()
         cost += t2 - t1
 
-        loss_items = loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+        loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)[1]
         loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
         metric.update(labels, preds, img_sizes)
@@ -52,16 +52,16 @@ def valid(dataloader, model, hyp, device, training):
 
     metric.build()
 
-    print(metric.desc_body)
+    print(metric.desc_body, file=sys.stderr)
 
     if training:
         model.float()
 
     else:
-        print(f'speed: ({cost / len(dataloader.dataset):.3})s per image')
+        print(f'speed: ({cost / len(dataloader.dataset):.3})s per image', file=sys.stderr)
         metric.print_details()
 
-    loss_record = [round(x, 4) for x in (loss_mean / len(dataloader)).tolist()]
+    loss_record = [round(x, 4) for x in loss_mean.tolist()]
 
     return {**dict(zip(['val/' + x for x in loss_fun.names], loss_record)), **metric.metrics}
 
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
     loss_items = torch.zeros(3, device=device)
 
-    loss_items += loss_fun(labels, pred_box, pred_cls, pred_dist, grid, grid_stride)[1]
+    loss_items += loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)[1]
 
     preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])

@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import json
 import math
@@ -48,7 +49,7 @@ def read_labels(file):
     with open(file, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
-        print('reading {}, {} records'.format(file, len(lines)))
+        print('reading {}, {} records'.format(file, len(lines)), file=sys.stderr)
         for index in range(len(lines)):
             indices.append(index)
             line = lines[index].replace('\n', '').split('  ')

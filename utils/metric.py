@@ -1,3 +1,4 @@
+import sys
 import torch
 import numpy as np
 from box import inv_letterbox, bbox_iou
@@ -121,11 +122,12 @@ class Metric:
                                          self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95'])
 
     def print_details(self):
-        print(('%12s' * 6) % ('class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95'))
+        print((' ' * 6).join(['class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95']), file=sys.stderr)
         for i in range(len(self.cls)):
             p = round(self.indices['P'][i], 4)
             r = round(self.indices['R'][i], 4)
             mAP50 = round(self.indices['AP'][:, 0][i], 4)
             mAP50_95 = round(self.indices['AP'].mean(1)[i], 4)
-
-            print(('%22s' + '%12s' * 5) % (self.names[self.cls[i]], self.count[self.cls[i]], p, r, mAP50, mAP50_95))
+            print((' ' * 6).join(
+                [str(x) for x in [self.names[self.cls[i]], self.count[self.cls[i]], p, r, mAP50, mAP50_95]]),
+                file=sys.stderr)

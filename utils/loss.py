@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from torch import nn
 import torch.nn.functional as F
 from box import bbox_iou, box2gap
@@ -11,6 +12,7 @@ class BoxLoss(nn.Module):
 
     def build_iou_loss(self, pred_box, target_box, weight, score_sum):
         iou = bbox_iou(pred_box, target_box, 'CIoU')
+
         return ((1.0 - iou) * weight).sum() / score_sum
 
     def build_dfl_loss(self, pred_dist, target_gap, weight, score_sum):
@@ -25,14 +27,14 @@ class BoxLoss(nn.Module):
 
         return ((loss1 + loss2).mean(-1, keepdim=True) * weight).sum() / score_sum
 
-    def forward(self, pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos):
-        weight = torch.masked_select(target_score.sum(2), mask_pos).unsqueeze(1)
+    def forward(self, pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask):
+        weight = torch.masked_select(target_score.sum(2), mask).unsqueeze(1)
 
         # iou loss
-        iou_loss = self.build_iou_loss(pred_box[mask_pos], target_box[mask_pos], weight, score_sum)
+        iou_loss = self.build_iou_loss(pred_box[mask], target_box[mask], weight, score_sum)
 
         # dist focal loss
-        dfl_loss = self.build_dfl_loss(pred_dist[mask_pos], target_gap[mask_pos], weight, score_sum)
+        dfl_loss = self.build_dfl_loss(pred_dist[mask], target_gap[mask], weight, score_sum)
 
         return iou_loss, dfl_loss
 
@@ -54,7 +56,7 @@ class LossFun:
 
         self.names = ['box_loss', 'cls_loss', 'dfl_loss']
 
-    def preprocess(self, labels, batch_size):
+    def build_label(self, labels, batch_size):
         if labels.shape[0] == 0:
             out = torch.zeros(batch_size, 0, 5, device=self.device)
         else:
@@ -68,111 +70,111 @@ class LossFun:
                     out[index, :num] = labels[matches, 1:]
 
         label_cls, label_box = out.split((1, 4), 2)
-        mask = torch.gt(out.sum(2, keepdim=True), 0).to(torch.int64)
+        label_mask = torch.gt(out.sum(2, keepdim=True), 0).to(torch.int64)
 
-        return label_cls, label_box, mask
+        return label_cls, label_box, label_mask
 
-    def build_metrics(self, label_box, label_cls, pred_box, pred_cls):
-        B, T = label_cls.shape[:2]
+    def build_mask(self, label_cls, label_box, label_mask, pred_cls, pred_box, grid):
+        B, T = label_box.shape[:2]
+        A = grid.shape[0]
+
+        # match mask
+        left_top, right_bottom = label_box.view(-1, 1, 4).chunk(2, 2)
+        deltas = torch.cat((grid.unsqueeze(0) - left_top, right_bottom - grid.unsqueeze(0)), 2).view(B, T, A, 4)
+
+        match_mask = torch.gt(deltas.amin(3), self.eps).to(torch.int64)
+
+        # cal metric
+        mask = (label_mask * match_mask).bool()
+        cls = torch.zeros([B, T, A], dtype=pred_cls.dtype, device=self.device)
+        iou = torch.zeros([B, T, A], dtype=pred_box.dtype, device=self.device)
 
         index = torch.zeros([2, B, T], dtype=torch.int64)
         index[0] = torch.arange(B).view(-1, 1).repeat(1, T)
         index[1] = label_cls.squeeze(2)
-        cls = pred_cls[index[0], :, index[1]]
-        iou = bbox_iou(label_box.unsqueeze(2), pred_box.unsqueeze(1), 'CIoU').squeeze(3).clamp(0)
+        cls[mask] = pred_cls[index[0], :, index[1]][mask]
+
+        mask_label_box = label_box.unsqueeze(2).repeat(1, 1, A, 1)[mask]
+        mask_pred_box = pred_box.unsqueeze(1).repeat(1, T, 1, 1)[mask]
+        iou[mask] = bbox_iou(mask_label_box, mask_pred_box, 'CIoU').squeeze(1).clamp(0)
+
         metric = cls.pow(self.alpha) * iou.pow(self.beta)
 
-        return cls, iou, metric
+        # top mask
+        top_metric, top_index = torch.topk(metric, self.topk, dim=2, largest=True)
 
-    def build_mask_pos(self, label_box, grid, mask, iou, metric):
-        B, T = label_box.shape[:2]
-        A = metric.shape[2]
-
-        # match_pos
-        left_top, right_bottom = label_box.view(-1, 1, 4).chunk(2, 2)
-        deltas = torch.cat((grid.unsqueeze(0) - left_top, right_bottom - grid.unsqueeze(0)), 2).view(
-            B, T, A, 4)
-
-        match_pos = torch.gt(deltas.amin(3), self.eps).to(torch.int64)
-
-        # top_pos
-        match_metric = metric * match_pos
-        top_metric, top_pos = torch.topk(match_metric, self.topk, dim=2, largest=True)
-
-        if len(mask):
-            top_mask = mask.repeat([1, 1, self.topk]).bool()
+        if len(label_mask):
+            top_mask = label_mask.repeat([1, 1, self.topk]).bool()
         else:
             top_mask = (top_metric.max(2, keepdim=True).values > self.eps).repeat([1, 1, self.topk])
 
-        top_pos = torch.where(top_mask, top_pos, 0)
-        is_in_topk = F.one_hot(top_pos, A).sum(2)
-        top_pos = torch.where(is_in_topk > 1, 0, is_in_topk)
+        top_index[~top_mask] = 0
+        is_in_topk = torch.zeros(metric.shape, dtype=torch.int64, device=metric.device)
+        for i in range(self.topk):
+            is_in_topk += F.one_hot(top_index[:, :, i], A)
 
-        mask_pos = match_pos * top_pos * mask
+        top_mask = torch.where(is_in_topk > 1, 0, is_in_topk)
+
+        mask = label_mask * match_mask * top_mask
 
         # drop duplicate
-        mask_pos_sum = mask_pos.sum(1)
-        if mask_pos_sum.max() > 1:
-            mask_pos_sum = (mask_pos_sum.unsqueeze(1) > 1).repeat([1, T, 1])
+        mask_sum = mask.sum(1)
+        if mask_sum.max() > 1:
+            mask_sum = (mask_sum.unsqueeze(1) > 1).repeat([1, T, 1])
             iou_max = iou.argmax(1)
             iou_max = F.one_hot(iou_max, T)
             iou_max = iou_max.permute(0, 2, 1)
-            mask_pos = torch.where(mask_pos_sum, iou_max, mask_pos)
+            mask = torch.where(mask_sum, iou_max, mask)
 
-        mask_pos_max = mask_pos.argmax(1)
-        mask_pos_sum = mask_pos.sum(1)
+        return iou, metric, mask
 
-        return mask_pos, mask_pos_max, mask_pos_sum
+    def build_targets(self, labels, pred_cls, pred_box, grid, grid_stride):
+        # label cls、box、mask
+        label_cls, label_box, label_mask = self.build_label(labels, pred_cls.shape[0])
 
-    def build_targets(self, labels, pred_box, pred_cls, grid, grid_stride):
-        # process label
-        label_cls, label_box, mask = self.preprocess(labels, pred_cls.shape[0])
+        # iou, metric, mask
+        iou, metric, mask = self.build_mask(label_cls, label_box, label_mask, pred_cls,
+                                            pred_box * grid_stride, grid * grid_stride)
 
-        # compute metric
-        cls, iou, metric = self.build_metrics(label_box, label_cls, pred_box * grid_stride, pred_cls)
-
-        # compute mask pos
-        mask_pos, mask_pos_max, mask_pos_sum = self.build_mask_pos(label_box, grid * grid_stride, mask, iou, metric)
-
-        # update metric
-        metric = metric * mask_pos
-        iou = iou * mask_pos
-        metric_max = metric.amax(axis=2, keepdim=True)
-        iou_max = iou.amax(axis=2, keepdim=True)
-
-        # make index
         B, T = label_cls.shape[:2]
         num_cls = pred_cls.shape[2]
+
+        # norm metric
+        iou *= mask
+        metric *= mask
+        iou_max = iou.amax(axis=2, keepdim=True)
+        metric_max = metric.amax(axis=2, keepdim=True)
+        norm_metric = (metric * iou_max / (metric_max + self.eps)).amax(1).unsqueeze(2)
+
+        # target cls
         batch_index = torch.arange(B, dtype=torch.int64, device=self.device).unsqueeze(1)
-        mask_pos_max = mask_pos_max + batch_index * T
+        mask_max = mask.argmax(1) + batch_index * T
+        target_cls = label_cls.flatten()[mask_max].clamp(0).to(torch.int64)
 
-        # compute target box
-        target_box = label_box.view(-1, 4)[mask_pos_max] / grid_stride
+        # target score
+        target_score = F.one_hot(target_cls, num_cls)
+        mask_sum = mask.sum(1).unsqueeze(2).repeat(1, 1, num_cls)
+        target_score = torch.where(mask_sum > 0, target_score, 0)
+        target_score = target_score * norm_metric
 
-        # compute target score
-        target_cls = label_cls.squeeze(2).flatten()[mask_pos_max].to(torch.int64)
-        target_cls = F.one_hot(target_cls, num_cls)
-        mask_label = mask_pos_sum.unsqueeze(2).repeat(1, 1, num_cls)
-        target_cls = torch.where(mask_label > 0, target_cls, 0)
-        norm_metric = ((iou_max * metric) / (metric_max + self.eps)).amax(1).unsqueeze(2)
-        target_score = target_cls * norm_metric
+        # target box
+        target_box = label_box.view(-1, 4)[mask_max] / grid_stride
 
-        # compute target gap
+        # target gap
         target_gap = box2gap(target_box, grid, self.reg_max)
 
-        return target_box, target_score, target_gap, mask_pos_sum.bool()
+        return target_score, target_box, target_gap, mask.sum(1).bool()
 
-    def __call__(self, labels, pred_box, pred_cls, pred_dist, grid, grid_stride):
+    def __call__(self, labels, pred_cls, pred_box, pred_dist, grid, grid_stride):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
 
-        target_box, target_score, target_gap, mask_pos = self.build_targets(labels, pred_box.detach(),
-                                                                            pred_cls.sigmoid().detach(), grid,
-                                                                            grid_stride)
+        target_score, target_box, target_gap, mask = self.build_targets(labels, pred_cls.detach().sigmoid(),
+                                                                        pred_box.detach().type(labels.dtype),
+                                                                        grid, grid_stride)
 
         score_sum = max(target_score.sum(), 1)
-
         loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
-        loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask_pos)
+        loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask)
 
         loss[0] *= self.box_w
         loss[1] *= self.cls_w
