@@ -129,6 +129,9 @@ class LossFun:
         return iou, metric, mask
 
     def build_targets(self, labels, pred_cls, pred_box, grid, grid_stride):
+        if len(labels) == 0:
+            return torch.zeros(pred_cls.shape).to(self.device), None, None, None
+
         # label cls、box、mask
         label_cls, label_box, label_mask = self.build_label(labels, pred_cls.shape[0])
 
@@ -174,7 +177,9 @@ class LossFun:
 
         score_sum = max(target_score.sum(), 1)
         loss[1] = self.bce(pred_cls, target_score).sum() / score_sum
-        loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask)
+
+        if mask is not None:
+            loss[0], loss[2] = self.boxloss(pred_box, pred_dist, target_box, target_gap, target_score, score_sum, mask)
 
         loss[0] *= self.box_w
         loss[1] *= self.cls_w
