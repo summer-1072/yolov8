@@ -180,7 +180,7 @@ def train(args, device):
 
     val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, hyp, model.anchor.strides[-1], False)
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=hyp['batch_size'],
-                                num_workers=hyp['njobs'], shuffle=True, collate_fn=LoadDataset.collate_fn)
+                                num_workers=hyp['njobs'], shuffle=False, collate_fn=LoadDataset.collate_fn)
 
     start_epoch = 0
     accumulate = max(round(hyp['total_batch_size'] / hyp['batch_size']), 1)
