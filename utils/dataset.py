@@ -59,6 +59,19 @@ def read_labels(file):
     return indices, imgs, labels
 
 
+def load_image(img_path, new_shape):
+    img = cv2.imread(img_path)
+    h0, w0 = img.shape[:2]
+
+    ratio = min(new_shape[0] / h0, new_shape[1] / w0)
+    if ratio != 1:
+        img = cv2.resize(img, (math.ceil(w0 * ratio), math.ceil(h0 * ratio)), cv2.INTER_LINEAR)
+
+    h1, w1 = img.shape[:2]
+
+    return img, (h0, w0), (h1, w1)
+
+
 def mosaic(index, indices, img_dir, imgs, labels, new_shape):
     c_x = int(random.uniform(new_shape[1] // 2, 2 * new_shape[1] - new_shape[1] // 2))
     c_y = int(random.uniform(new_shape[0] // 2, 2 * new_shape[0] - new_shape[0] // 2))
@@ -70,12 +83,7 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
     img4_labels = []
     for (i, index) in enumerate(t_indices):
         # load img
-        img = cv2.imread(os.path.join(img_dir, imgs[index]))
-        h, w = img.shape[:2]
-        ratio = max(new_shape[0] / h, new_shape[1] / w)
-        if ratio != 1:
-            img = cv2.resize(img, (math.ceil(w * ratio), math.ceil(h * ratio)), cv2.INTER_LINEAR)
-        h, w = img.shape[:2]
+        img, _, (h, w) = load_image(os.path.join(img_dir, imgs[index]), new_shape)
 
         # mosaic img
         if i == 0:
@@ -97,7 +105,7 @@ def mosaic(index, indices, img_dir, imgs, labels, new_shape):
         offset = (y1a - y1b, x1a - x1b)
         img_labels = labels[index].copy()
         if len(img_labels):
-            img_labels[:, 1:5] = scale_offset_box(img_labels[:, 1:5], img.shape[:2], offset)
+            img_labels[:, 1:5] = scale_offset_box(img_labels[:, 1:5], (h, w), offset)
             img4_labels.append(img_labels)
 
     img4_labels = np.concatenate(img4_labels, 0)
@@ -218,6 +226,10 @@ class LoadDataset(Dataset):
             img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
             img_size1 = img.shape[:2]
             img_size = [img_size0, img_size1]
+
+            img, (h0, w0), (h1, w1) = load_image(os.path.join(self.img_dir, self.imgs[index]), self.hyp['shape'])
+            img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
+
             labels = self.labels[index].copy()
             if len(labels):
                 labels[:, 1:5] = scale_offset_box(labels[:, 1:5], shape, offset)

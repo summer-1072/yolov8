@@ -61,7 +61,7 @@ def bbox_iou(box1, box2, type='IoU', eps=1e-5, dim=-1):
 
 def letterbox(img, new_shape, stride):
     shape = img.shape[:2]
-    ratio = min(min(new_shape[0] / shape[0], new_shape[1] / shape[1]), 1)
+    ratio = min(min(new_shape[0] / shape[0], new_shape[1] / shape[1]), 1.0)
 
     unpad_shape = int(round(shape[1] * ratio)), int(round(shape[0] * ratio))
     dx, dy = ((new_shape[1] - unpad_shape[0]) % stride) / 2, ((new_shape[0] - unpad_shape[1]) % stride) / 2
