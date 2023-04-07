@@ -54,11 +54,9 @@ njobs: 4
 
 # close epoch
 close_mosaic: 150
-close_affine: 150
 
 # image augment
 mosaic: True
-affine: True
 hsv: 0.5
 flipud: 0
 fliplr: 0.5

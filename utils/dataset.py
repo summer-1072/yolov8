@@ -72,7 +72,7 @@ def load_image(img_path, new_shape):
     return img, (h0, w0), (h1, w1)
 
 
-def mosaic(index, indices, img_dir, imgs, labels, new_shape):
+def mix_transform(index, indices, img_dir, imgs, labels, new_shape):
     c_x = int(random.uniform(new_shape[1] // 2, 2 * new_shape[1] - new_shape[1] // 2))
     c_y = int(random.uniform(new_shape[0] // 2, 2 * new_shape[0] - new_shape[0] // 2))
 
@@ -216,16 +216,16 @@ class LoadDataset(Dataset):
         self.indices, self.imgs, self.labels = read_labels(label_file)
 
     def __getitem__(self, index):
-        if self.augment and self.hyp['mosaic']:
-            img, labels = mosaic(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
+        if self.augment and random.random() <= self.hyp['mosaic']:
+            img, labels = mix_transform(index, self.indices, self.img_dir, self.imgs, self.labels, self.hyp['shape'])
             img_size = [None, None]
 
         else:
-            img = cv2.imread(os.path.join(self.img_dir, self.imgs[index]))
-            img_size0 = img.shape[:2]
-            img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
-            img_size1 = img.shape[:2]
-            img_size = [img_size0, img_size1]
+            # img = cv2.imread(os.path.join(self.img_dir, self.imgs[index]))
+            # img_size0 = img.shape[:2]
+            # img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
+            # img_size1 = img.shape[:2]
+            # img_size = [img_size0, img_size1]
 
             img, (h0, w0), (h1, w1) = load_image(os.path.join(self.img_dir, self.imgs[index]), self.hyp['shape'])
             img, shape, offset = letterbox(img, self.hyp['shape'], self.stride)
@@ -234,18 +234,18 @@ class LoadDataset(Dataset):
             if len(labels):
                 labels[:, 1:5] = scale_offset_box(labels[:, 1:5], shape, offset)
 
-        if self.augment and self.hyp['affine']:
+        if self.augment and random.random() <= self.hyp['affine']:
             img, labels = affine_transform(img, labels, self.hyp['scale'], self.hyp['translate'])
 
         labels = check_labels(labels, self.hyp['box_t'], self.hyp['wh_rt'])
 
-        if self.augment and random.random() < self.hyp['hsv']:
+        if self.augment and random.random() <= self.hyp['hsv']:
             augment_hsv(img, self.hyp['h'], self.hyp['s'], self.hyp['v'])
 
-        if self.augment and random.random() < self.hyp['flipud']:
+        if self.augment and random.random() <= self.hyp['flipud']:
             img, labels = flip_up_down(img, labels)
 
-        if self.augment and random.random() < self.hyp['fliplr']:
+        if self.augment and random.random() <= self.hyp['fliplr']:
             img, labels = flip_left_right(img, labels)
 
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
