@@ -27,7 +27,7 @@ def valid(dataloader, model, hyp, device, training):
 
     cost = 0
     pbar = tqdm(dataloader, file=sys.stderr)
-    for index, (imgs, img_sizes, labels) in enumerate(pbar):
+    for index, (imgs, img_infos, labels) in enumerate(pbar):
         t1 = time_sync()
 
         imgs = (imgs.half() if half else imgs.float()) / 255
@@ -46,7 +46,7 @@ def valid(dataloader, model, hyp, device, training):
         loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)[1]
         loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
-        metric.update(labels, preds, img_sizes)
+        metric.update(labels, preds, img_infos)
 
         pbar.set_description(metric.desc_head)
 
@@ -172,6 +172,11 @@ if __name__ == "__main__":
 
     img_sizes = torch.tensor([[[12, 12], [12, 12]], [[12, 12], [12, 12]]])
 
+    img_infos = [{'shape': (12, 12), 'ratio': 1, 'offset': (0, 0)},
+                 {'shape': (12, 12), 'ratio': 1, 'offset': (0, 0)},
+                 {'shape': (12, 12), 'ratio': 1, 'offset': (0, 0)},
+                 {'shape': (12, 12), 'ratio': 1, 'offset': (0, 0)}]
+
     hyp = {'alpha': 1, 'beta': 1, 'topk': 5, 'box_w': 1, 'cls_w': 1, 'dfl_w': 1, 'conf_t': 0.25,
            'multi_label': False, 'max_box': 30000, 'max_wh': 7680, 'iou_t': 0.7, 'max_det': 300, 'merge': False}
 
@@ -190,7 +195,7 @@ if __name__ == "__main__":
     preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
                                 hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
-    metric.update(labels, preds, img_sizes)
+    metric.update(labels, preds, img_infos)
 
     metric.build()
 

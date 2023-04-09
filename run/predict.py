@@ -64,10 +64,9 @@ def detect(args, device):
         img0 = cv2.imread(os.path.join(args.img_dir, file))
 
         t1 = time_sync()
-        img1, _, _ = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
+        img1, ratio, offset = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
         img1 = img1.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img1 = np.ascontiguousarray(img1)
-        img1 = img1 / 255
+        img1 = np.ascontiguousarray(img1) / 255
         img1 = torch.from_numpy(img1)
         img1 = img1.half() if half else img1.float()
         img1 = img1.unsqueeze(0)
@@ -84,7 +83,7 @@ def detect(args, device):
         pred = pred[0]
 
         if pred.shape[0] > 0:
-            pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], img1.shape[2:])
+            pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], ratio, offset)
 
         t4 = time_sync()
         info = save_results(img0, pred, cls, os.path.join(log_dir, file))

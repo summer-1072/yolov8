@@ -73,21 +73,18 @@ def letterbox(img, new_shape, stride):
     left, right = int(round(dx - 0.1)), int(round(dx + 0.1))
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
 
-    return img, img.shape[:2], (dy, dx)
+    return img, ratio, (dy, dx)
 
 
-def inv_letterbox(box, shape0, shape1):
-    gain = min(shape1[0] / shape0[0], shape1[1] / shape0[1])
-    pad = (shape1[1] - shape0[1] * gain) / 2, (shape1[0] - shape0[0] * gain) / 2
+def inv_letterbox(box, shape, ratio, offset):
+    box[:, [1, 3]] -= offset[0]  # y padding
+    box[:, [0, 2]] -= offset[1]  # x padding
+    box[:, :4] /= ratio
 
-    box[:, [0, 2]] -= pad[0]  # x padding
-    box[:, [1, 3]] -= pad[1]  # y padding
-    box[:, :4] /= gain
-
-    box[:, 0].clamp_(0, shape0[1])
-    box[:, 1].clamp_(0, shape0[0])
-    box[:, 2].clamp_(0, shape0[1])
-    box[:, 3].clamp_(0, shape0[0])
+    box[:, 0].clamp_(0, shape[1])
+    box[:, 1].clamp_(0, shape[0])
+    box[:, 2].clamp_(0, shape[1])
+    box[:, 3].clamp_(0, shape[0])
 
     return box
 

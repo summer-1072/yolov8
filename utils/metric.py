@@ -4,23 +4,22 @@ import numpy as np
 from box import inv_letterbox, bbox_iou
 
 
-def smooth(x, f=0.05):
-    nf = round(len(x) * f * 2) // 2 + 1
-    p = np.ones(nf // 2)
-    yp = np.concatenate((p * x[0], x, p * x[-1]), 0)
+def smooth(input, weight=0.05):
+    val = round(len(input) * weight * 2) // 2 + 1
+    p = np.concatenate((np.ones(val // 2) * input[0], input, np.ones(val // 2) * input[-1]), 0)
 
-    return np.convolve(yp, np.ones(nf) / nf, mode='valid')
+    return np.convolve(p, np.ones(val) / val, mode='valid')
 
 
 class Metric:
     def __init__(self, names, device):
         self.names = names
-        self.device = device
         self.num_img = 0
         self.cls = []
         self.count = []
         self.indices = {}
         self.metrics = {}
+        self.device = device
 
         self.status = []
         self.iouv = torch.linspace(0.5, 0.95, 10)
@@ -28,9 +27,9 @@ class Metric:
         self.desc_head = ('%12s' * 7) % ('images', 'class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95')
         self.desc_body = ('%12s' * 7) % ('none', 'none', 'none', 'none', 'none', 'none', 'none')
 
-    def update(self, labels, preds, img_sizes):
+    def update(self, labels, preds, img_infos):
         for index, pred in enumerate(preds):
-            img_size = img_sizes[index]
+            img_info = img_infos[index]
             label = labels[labels[:, 0] == index]
 
             pred = pred.detach()
@@ -38,29 +37,32 @@ class Metric:
 
             matrix = torch.zeros(pred.shape[0], self.iouv.shape[0], dtype=torch.bool, device=self.device)
             self.num_img += 1
-            if label.shape[0] != 0:
-                if pred.shape[0] == 0:
+
+            if pred.shape[0] == 0:
+                if label.shape[0] != 0:
                     self.status.append((matrix, *torch.zeros((2, 0), device=self.device), label[:, 1]))
 
-                else:
-                    pred[:, :4] = inv_letterbox(pred[:, :4], img_size[0], img_size[1])
-                    label[:, 2:] = inv_letterbox(label[:, 2:], img_size[0], img_size[1])
+                continue
 
-                    iou = bbox_iou(label[:, 2:].unsqueeze(1), pred[:, :4].unsqueeze(0), 'IoU').squeeze(2).clamp(0)
-                    cls = label[:, 1:2] == pred[:, 5]
+            if label.shape[0] != 0:
+                pred[:, :4] = inv_letterbox(pred[:, :4], img_info['shape'], img_info['ratio'], img_info['offset'])
+                label[:, 2:] = inv_letterbox(label[:, 2:], img_info['shape'], img_info['ratio'], img_info['offset'])
 
-                    for i in range(len(self.iouv)):
-                        y, x = torch.where((iou >= self.iouv[i]) & cls)
-                        if len(x):
-                            matches = torch.cat((torch.stack((y, x), 1), iou[y, x][:, None]), 1).cpu().numpy()
-                            matches = matches[matches[:, 2].argsort()[::-1]]
-                            matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                            matches = matches[matches[:, 2].argsort()[::-1]]
-                            matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+                iou = bbox_iou(label[:, 2:].unsqueeze(1), pred[:, :4].unsqueeze(0), 'IoU').squeeze(2).clamp(0)
+                cls = label[:, 1:2] == pred[:, 5]
 
-                            matrix[matches[:, 1].astype(int), i] = True
+                for i in range(len(self.iouv)):
+                    y, x = torch.where((iou >= self.iouv[i]) & cls)
+                    if len(x):
+                        matches = torch.cat((torch.stack((y, x), 1), iou[y, x][:, None]), 1).cpu().numpy()
+                        matches = matches[matches[:, 2].argsort()[::-1]]
+                        matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                        matches = matches[matches[:, 2].argsort()[::-1]]
+                        matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
 
-                    self.status.append((matrix, pred[:, 4], pred[:, 5], label[:, 1]))
+                        matrix[matches[:, 1].astype(int), i] = True
+
+            self.status.append((matrix, pred[:, 4], pred[:, 5], label[:, 1]))
 
     def build(self, eps=1e-16):
         matrix, conf, pred_cls, target_cls = [torch.cat(x, 0).cpu().numpy() for x in zip(*self.status)]

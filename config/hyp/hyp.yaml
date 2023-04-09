@@ -48,15 +48,16 @@ warmup_momentum: 0.8
 
 # dataloader
 total_batch_size: 64
-batch_size: 16
+batch_size: 4
 epochs: 300
 njobs: 4
 
 # close epoch
-close_mosaic: 150
+close_mosaic: 80
 
 # image augment
-mosaic: True
+mosaic: 1.0
+affine: 0.5
 hsv: 0.5
 flipud: 0
 fliplr: 0.5

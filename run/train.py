@@ -206,10 +206,7 @@ def train(args, device):
     last_step = -1
     for epoch in range(start_epoch, hyp['epochs']):
         if epoch >= hyp['close_mosaic']:
-            hyp['mosaic'] = False
-
-        if epoch >= hyp['close_affine']:
-            hyp['affine'] = False
+            hyp['mosaic'] = 0.0
 
         model.train()
 
@@ -302,7 +299,7 @@ if __name__ == "__main__":
     parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
+    parser.add_argument('--model_path', default='../config/model/yolov8m.yaml')
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
 
