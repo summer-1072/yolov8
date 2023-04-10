@@ -65,12 +65,10 @@ def detect(args, device):
 
         t1 = time_sync()
         img1, ratio, offset = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
-        img1 = img1.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img1 = np.ascontiguousarray(img1) / 255
-        img1 = torch.from_numpy(img1)
-        img1 = img1.half() if half else img1.float()
+        img1 = np.ascontiguousarray(img1.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
+        img1 = torch.from_numpy(img1).to(device)
+        img1 = (img1.half() if half else img1.float()) / 255
         img1 = img1.unsqueeze(0)
-        img1 = img1.to(device)
 
         t2 = time_sync()
         pred_box, pred_cls, pred_dist, grid, grid_stride = model(img1)

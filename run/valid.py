@@ -29,9 +29,8 @@ def valid(dataloader, model, hyp, device, training):
     pbar = tqdm(dataloader, file=sys.stderr)
     for index, (imgs, img_infos, labels) in enumerate(pbar):
         t1 = time_sync()
-
+        imgs = imgs.to(device, non_blocking=True)
         imgs = (imgs.half() if half else imgs.float()) / 255
-        imgs = imgs.to(device)
         labels = labels.to(device)
 
         pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
