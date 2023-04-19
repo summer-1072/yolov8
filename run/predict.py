@@ -60,36 +60,38 @@ def detect(args, device):
 
     files = [x for x in os.listdir(args.img_dir)]
     d1, d2, d3, num = 0, 0, 0, len(files)
-    for i, file in enumerate(files):
-        img0 = cv2.imread(os.path.join(args.img_dir, file))
 
-        t1 = time_sync()
-        img1, ratio, offset = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
-        img1 = np.ascontiguousarray(img1.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
-        img1 = torch.from_numpy(img1).to(device)
-        img1 = (img1.half() if half else img1.float()) / 255
-        img1 = img1.unsqueeze(0)
+    with torch.no_grad():
+        for i, file in enumerate(files):
+            img0 = cv2.imread(os.path.join(args.img_dir, file))
 
-        t2 = time_sync()
-        pred_box, pred_cls, pred_dist, grid, grid_stride = model(img1)
-        pred = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
+            t1 = time_sync()
+            img1, ratio, offset = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
+            img1 = np.ascontiguousarray(img1.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
+            img1 = torch.from_numpy(img1).to(device)
+            img1 = (img1.half() if half else img1.float()) / 255
+            img1 = img1.unsqueeze(0)
 
-        t3 = time_sync()
-        pred = non_max_suppression(pred, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
-                                   hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+            t2 = time_sync()
+            pred_box, pred_cls, pred_dist, grid, grid_stride = model(img1)
+            pred = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
 
-        pred = pred[0]
+            t3 = time_sync()
+            pred = non_max_suppression(pred, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
+                                       hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
-        if pred.shape[0] > 0:
-            pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], ratio, offset)
+            pred = pred[0]
 
-        t4 = time_sync()
-        info = save_results(img0, pred, cls, os.path.join(log_dir, file))
+            if pred.shape[0] > 0:
+                pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], ratio, offset)
 
-        d1 += t2 - t1
-        d2 += t3 - t2
-        d3 += t4 - t3
-        print('image %d/%d' % (i + 1, num), file, info, f'({t4 - t1:.3})s')
+            t4 = time_sync()
+            info = save_results(img0, pred, cls, os.path.join(log_dir, file))
+
+            d1 += t2 - t1
+            d2 += t3 - t2
+            d3 += t4 - t3
+            print('image %d/%d' % (i + 1, num), file, info, f'({t4 - t1:.3})s')
 
     sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per image'
     d1 = (d1 / num)

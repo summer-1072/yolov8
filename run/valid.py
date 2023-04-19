@@ -27,42 +27,43 @@ def valid(dataloader, model, hyp, device, training):
 
     cost = 0
     pbar = tqdm(dataloader, file=sys.stderr)
-    for index, (imgs, img_infos, labels) in enumerate(pbar):
-        t1 = time_sync()
-        imgs = imgs.to(device, non_blocking=True)
-        imgs = (imgs.half() if half else imgs.float()) / 255
-        labels = labels.to(device)
 
-        pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
-        preds = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
+    with torch.no_grad():
+        for index, (imgs, img_infos, labels) in enumerate(pbar):
+            t1 = time_sync()
+            imgs = imgs.to(device, non_blocking=True)
+            imgs = (imgs.half() if half else imgs.float()) / 255
+            labels = labels.to(device)
 
-        preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
-                                    hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+            pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
+            preds = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
+            preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
+                                        hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
 
-        t2 = time_sync()
-        cost += t2 - t1
+            t2 = time_sync()
+            cost += t2 - t1
 
-        loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)[1]
-        loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
+            loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)[1]
+            loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
-        metric.update(labels, preds, img_infos)
+            metric.update(labels, preds, img_infos)
 
-        pbar.set_description(metric.desc_head)
+            pbar.set_description(metric.desc_head)
 
-    metric.build()
+        metric.build()
 
-    print(metric.desc_body, file=sys.stderr)
+        print(metric.desc_body, file=sys.stderr)
 
-    if training:
-        model.float()
+        if training:
+            model.float()
 
-    else:
-        print(f'speed: ({cost / len(dataloader.dataset):.3})s per image', file=sys.stderr)
-        metric.print_details()
+        else:
+            print(f'speed: ({cost / len(dataloader.dataset):.3})s per image', file=sys.stderr)
+            metric.print_details()
 
-    loss_record = [round(x, 4) for x in loss_mean.tolist()]
+        loss_record = [round(x, 4) for x in loss_mean.tolist()]
 
-    return {**dict(zip(['val/' + x for x in loss_fun.names], loss_record)), **metric.metrics}
+        return {**dict(zip(['val/' + x for x in loss_fun.names], loss_record)), **metric.metrics}
 
 
 # if __name__ == "__main__":

@@ -158,7 +158,9 @@ def train(args, device):
     ema = EMA(model, hyp['ema_decay'], hyp['tau'])
 
     # optimizer
-    optimizer = build_optimizer(model, hyp['optim'], hyp['lr'], hyp['momentum'], hyp['weight_decay'])
+    accumulate = max(round(hyp['total_batch_size'] / hyp['batch_size']), 1)
+    weight_decay = hyp['weight_decay'] * hyp['batch_size'] * accumulate / hyp['total_batch_size']
+    optimizer = build_optimizer(model, hyp['optim'], hyp['lr'], hyp['momentum'], weight_decay)
 
     # scheduler
     lr_fun, scheduler = build_scheduler(optimizer, hyp['one_cycle'], hyp['lrf'], hyp['epochs'])
@@ -183,7 +185,6 @@ def train(args, device):
                                 num_workers=hyp['njobs'], shuffle=False, collate_fn=LoadDataset.collate_fn)
 
     start_epoch = 0
-    accumulate = max(round(hyp['total_batch_size'] / hyp['batch_size']), 1)
     warmup_max = max(round(hyp['warmup_epoch'] * len(train_dataloader)), 100)
 
     # resume train
@@ -242,7 +243,6 @@ def train(args, device):
                 pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
 
                 loss, loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)
-
                 loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
             # backward
@@ -291,6 +291,8 @@ def train(args, device):
             valid(val_dataloader, ema.model, hyp, device, False)
             break
 
+    torch.cuda.empty_cache()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -301,7 +303,7 @@ if __name__ == "__main__":
     parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
+    parser.add_argument('--model_path', default='../config/model/yolov8l.yaml')
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
 
