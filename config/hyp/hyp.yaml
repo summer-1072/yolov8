@@ -1,6 +1,6 @@
 # ------------- predict -------------
 # image size
-shape: [ 384, 640 ]
+shape: [ 544, 960 ]
 
 # non-maximum suppression
 conf_t: 0.25
@@ -42,18 +42,18 @@ lrf: 0.01
 patience: 50
 
 # warmup
-warmup_epoch: 5
+warmup_epoch: 3
 warmup_bias_lr: 0.1
 warmup_momentum: 0.8
 
 # dataloader
 total_batch_size: 64
-batch_size: 32
+batch_size: 16
 epochs: 100
-njobs: 4
+njobs: 6
 
 # close epoch
-close_mosaic: 90
+close_mosaic: 10
 
 # image augment
 mosaic: 1.0

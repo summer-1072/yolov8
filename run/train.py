@@ -270,6 +270,8 @@ def train(args, device):
                 *loss_record, labels.shape[0], hyp['shape']
             ))
 
+        lr_record = {f'lr/pg{i}': round(x['lr'], 4) for i, x in enumerate(optimizer.param_groups)}
+
         # scheduler step
         scheduler.step()
 
@@ -281,9 +283,8 @@ def train(args, device):
 
         # save train
         loss_record = [round(x, 4) for x in loss_mean.tolist()]
-        metrics = {**dict(zip(['train/' + x for x in loss_fun.names], loss_record)), **metric,
-                   **{f'lr/pg{i}': round(x['lr'], 4) for i, x in enumerate(optimizer.param_groups)},
-                   **{'ema/decay': round(ema.decay, 4)}}
+        metrics = {**dict(zip(['train/' + x for x in loss_fun.names], loss_record)),
+                   **metric, **lr_record, **{'ema/decay': round(ema.decay, 4)}}
 
         save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, args.log_dir)
 
