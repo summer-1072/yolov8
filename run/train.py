@@ -292,6 +292,7 @@ def train(args, device):
             valid(val_dataloader, ema.model, hyp, device, False)
             break
 
+    valid(val_dataloader, ema.model, hyp, device, False)
     torch.cuda.empty_cache()
 
 

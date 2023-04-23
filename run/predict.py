@@ -24,8 +24,8 @@ def save_results(img, pred, cls, file):
 
             c = int(line[5])
             v = round(line[4], 2)
-            cv2.rectangle(img, pt1, pt2, color(c), 4)
-            cv2.putText(img, cls[c] + ' ' + str(v), pt3, 0, 0.75, (255, 255, 255), 2)
+            cv2.rectangle(img, pt1, pt2, color(c), 1)
+            cv2.putText(img, cls[c] + ':' + str(v), pt3, cv2.FONT_HERSHEY_SIMPLEX, 0.5, color(c), 1, cv2.LINE_AA)
 
     else:
         info = 'zero objects'
@@ -102,11 +102,11 @@ def detect(args, device):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_dir', type=str, default='../dataset/coco/images')
-parser.add_argument('--cls_path', type=str, default='../dataset/coco/cls.yaml')
-parser.add_argument('--model_path', type=str, default='../config/model/yolov8x.yaml')
-parser.add_argument('--weight_path', type=str, default='../config/weight/yolov8x.pth')
-parser.add_argument('--fused', type=bool, default=True)
+parser.add_argument('--img_dir', default='../dataset/bdd10k/images/test')
+parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
+parser.add_argument('--model_path', type=str, default='../config/model/yolov8s.yaml')
+parser.add_argument('--weight_path', default='../log/train/train1/weight/ema.pth')
+parser.add_argument('--fused', type=bool, default=False)
 parser.add_argument('--hyp_path', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--log_dir', type=str, default='../log/detect')
 args = parser.parse_args()

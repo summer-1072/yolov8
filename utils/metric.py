@@ -124,12 +124,15 @@ class Metric:
                                          self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95'])
 
     def print_details(self):
-        print((' ' * 6).join(['class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95']), file=sys.stderr)
+        print((' ' * 6).join([str(x).ljust(20) for x in ['class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95']]),
+              file=sys.stderr)
+
         for i in range(len(self.cls)):
             p = round(self.indices['P'][i], 4)
             r = round(self.indices['R'][i], 4)
             mAP50 = round(self.indices['AP'][:, 0][i], 4)
             mAP50_95 = round(self.indices['AP'].mean(1)[i], 4)
+
             print((' ' * 6).join(
-                [str(x) for x in [self.names[self.cls[i]], self.count[self.cls[i]], p, r, mAP50, mAP50_95]]),
+                [str(x).ljust(20) for x in [self.names[self.cls[i]], self.count[self.cls[i]], p, r, mAP50, mAP50_95]]),
                 file=sys.stderr)
