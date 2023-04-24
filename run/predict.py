@@ -1,16 +1,17 @@
 import os
+import sys
 import cv2
 import yaml
 import torch
 import argparse
 import numpy as np
 from tools import load_model
-from util import time_sync, color
 from collections import Counter
+from util import time_sync, color
 from box import letterbox, inv_letterbox, non_max_suppression
 
 
-def save_results(img, pred, cls, file):
+def annotate(img, pred, cls):
     if len(pred) > 0:
         objs = [[k, v] for k, v in dict(Counter(pred[:, 5].tolist())).items()]
         objs.sort()
@@ -30,12 +31,38 @@ def save_results(img, pred, cls, file):
     else:
         info = 'zero objects'
 
-    cv2.imwrite(file, img)
-
-    return info
+    return img, info
 
 
-def detect(args, device):
+def detect(ori_img, hyp, model, half, cls, device):
+    t1 = time_sync()
+
+    pre_img, ratio, offset = letterbox(ori_img, hyp['shape'], model.anchor.strides[-1])
+    pre_img = np.ascontiguousarray(pre_img.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
+    pre_img = torch.from_numpy(pre_img).to(device)
+    pre_img = (pre_img.half() if half else pre_img.float()) / 255
+    pre_img = pre_img.unsqueeze(0)
+
+    t2 = time_sync()
+    pred_box, pred_cls, pred_dist, grid, grid_stride = model(pre_img)
+    pred = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
+
+    t3 = time_sync()
+    pred = non_max_suppression(pred, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
+                               hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+
+    pred = pred[0]
+
+    if pred.shape[0] > 0:
+        pred[:, :4] = inv_letterbox(pred[:, :4], ori_img.shape[:2], ratio, offset)
+
+    t4 = time_sync()
+    img, info = annotate(ori_img, pred, cls)
+
+    return img, info, t1, t2, t3, t4
+
+
+def predict(args, device):
     # load cls
     cls = yaml.safe_load(open(args.cls_path, encoding="utf-8"))
 
@@ -58,51 +85,63 @@ def detect(args, device):
         log_dir = os.path.join(args.log_dir, 'detect' + str(ord))
     os.makedirs(log_dir)
 
-    files = [x for x in os.listdir(args.img_dir)]
-    d1, d2, d3, num = 0, 0, 0, len(files)
+    # predict image
+    if args.img_dir:
+        files = sorted(os.listdir(args.img_dir))
+        d1, d2, d3, num = 0, 0, 0, len(files)
+        print('read image dir: %s, %d images' % (args.img_dir, num), file=sys.stderr)
 
-    with torch.no_grad():
-        for i, file in enumerate(files):
-            img0 = cv2.imread(os.path.join(args.img_dir, file))
+        with torch.no_grad():
+            for i, file in enumerate(files):
+                img = cv2.imread(os.path.join(args.img_dir, file))
+                img, info, t1, t2, t3, t4 = detect(img, hyp, model, half, cls, device)
+                cv2.imwrite(os.path.join(log_dir, file), img)
 
-            t1 = time_sync()
-            img1, ratio, offset = letterbox(img0, hyp['shape'], model.anchor.strides[-1])
-            img1 = np.ascontiguousarray(img1.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
-            img1 = torch.from_numpy(img1).to(device)
-            img1 = (img1.half() if half else img1.float()) / 255
-            img1 = img1.unsqueeze(0)
+                d1 += t2 - t1
+                d2 += t3 - t2
+                d3 += t4 - t3
+                print('image %d/%d' % (i + 1, num), file, info, f'({t4 - t1:.3})s', file=sys.stderr)
 
-            t2 = time_sync()
-            pred_box, pred_cls, pred_dist, grid, grid_stride = model(img1)
-            pred = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
+        sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per image'
+        d1, d2, d3 = (d1 / num), (d2 / num), (d3 / num)
+        d4 = d1 + d2 + d3
+        print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s'), file=sys.stderr)
 
-            t3 = time_sync()
-            pred = non_max_suppression(pred, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
-                                       hyp['max_wh'], hyp['iou_t'], hyp['max_det'], hyp['merge'])
+    # predict video
+    elif args.video_dir:
+        files = sorted(os.listdir(args.video_dir))
+        print('read video dir: %s, %d videos' % (args.video_dir, len(files)), file=sys.stderr)
 
-            pred = pred[0]
+        with torch.no_grad():
+            for file in files:
+                cap = cv2.VideoCapture(os.path.join(args.video_dir, file))
+                frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), int(cap.get(cv2.CAP_PROP_FPS))
+                h, w = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-            if pred.shape[0] > 0:
-                pred[:, :4] = inv_letterbox(pred[:, :4], img0.shape[:2], ratio, offset)
+                d1, d2, d3, num = 0, 0, 0, frames
+                print('read video: %s, %d frames' % (file, frames), file=sys.stderr)
 
-            t4 = time_sync()
-            info = save_results(img0, pred, cls, os.path.join(log_dir, file))
+                video = cv2.VideoWriter(os.path.join(log_dir, file[:file.index('.')] + '.mp4'),
+                                        cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                for i in range(num):
+                    _, frame = cap.read(i)
+                    img, info, t1, t2, t3, t4 = detect(frame, hyp, model, half, cls, device)
+                    video.write(img)
 
-            d1 += t2 - t1
-            d2 += t3 - t2
-            d3 += t4 - t3
-            print('image %d/%d' % (i + 1, num), file, info, f'({t4 - t1:.3})s')
+                    d1 += t2 - t1
+                    d2 += t3 - t2
+                    d3 += t4 - t3
+                    print('frame %d/%d' % (i + 1, num), info, f'({t4 - t1:.3})s', file=sys.stderr)
 
-    sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per image'
-    d1 = (d1 / num)
-    d2 = (d2 / num)
-    d3 = (d3 / num)
-    d4 = d1 + d2 + d3
-    print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s'))
+                sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per frame'
+                d1, d2, d3 = (d1 / num), (d2 / num), (d3 / num)
+                d4 = d1 + d2 + d3
+                print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s'), file=sys.stderr)
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--img_dir', default='../dataset/bdd10k/images/test')
+parser.add_argument('--video_dir', default='../dataset/bdd100k/videos/test')
 parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
 parser.add_argument('--model_path', type=str, default='../config/model/yolov8s.yaml')
 parser.add_argument('--weight_path', default='../log/train/train1/weight/ema.pth')
@@ -112,4 +151,4 @@ parser.add_argument('--log_dir', type=str, default='../log/detect')
 args = parser.parse_args()
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-detect(args, device)
+predict(args, device)
