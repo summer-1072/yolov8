@@ -29,7 +29,7 @@ ema_decay: 0.9999
 tau: 2000
 
 # optimizer
-optim: Adam
+optim: SGD
 lr: 0.01
 momentum: 0.937
 weight_decay: 0.0005
@@ -50,7 +50,7 @@ warmup_momentum: 0.8
 total_batch_size: 64
 batch_size: 16
 epochs: 100
-njobs: 6
+njobs: 8
 
 # close epoch
 close_mosaic: 10
