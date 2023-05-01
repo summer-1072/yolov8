@@ -48,7 +48,7 @@ warmup_momentum: 0.8
 
 # dataloader
 total_batch_size: 64
-batch_size: 16
+batch_size: 8
 epochs: 100
 njobs: 8
 
