@@ -1,11 +1,11 @@
 import yaml
-from modules import *
-from yolo import YOLO
+from yolo import *
 
 
 def load_model(model_path, cls, weight_path, fused):
     config = yaml.safe_load(open(model_path, encoding="utf-8"))
-    model = YOLO(config['network'], config['reg_max'], config['chs'], config['strides'], cls)
+
+    model = eval(config['model'])(config['network'], config['reg_max'], config['chs'], config['strides'], cls)
 
     if weight_path:
         weight = torch.load(weight_path)

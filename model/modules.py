@@ -66,10 +66,10 @@ class C3F(nn.Module):
     def __init__(self, ch_in, ch_out, num, shortcut, exp=0.5):
         super().__init__()
 
-        ch_ = int(ch_out * exp)
-        self.conv1 = Conv(ch_in, ch_, 1, 1)
-        self.conv2 = Conv(ch_in, ch_, 1, 1)
-        self.conv3 = Conv((2 + num) * ch_, ch_out, 1, 1)
+        self.ch_ = int(ch_out * exp)
+        self.conv1 = Conv(ch_in, self.ch_, 1, 1)
+        self.conv2 = Conv(ch_in, self.ch_, 1, 1)
+        self.conv3 = Conv((2 + num) * self.ch_, ch_out, 1, 1)
         self.m = nn.ModuleList(BottleNeck(self.ch_, self.ch_, (3, 3), 1, shortcut) for _ in range(num))
 
     def forward(self, x):

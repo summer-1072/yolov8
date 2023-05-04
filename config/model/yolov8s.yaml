@@ -1,3 +1,5 @@
+model: 'YOLO'
+
 network:
   - 'Conv(3, 32, 3, 2)'
   - 'Conv(32, 64, 3, 2)'
