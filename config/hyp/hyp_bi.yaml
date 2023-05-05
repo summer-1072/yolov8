@@ -1,0 +1,70 @@
+# ------------- predict -------------
+# image size
+shape: [ 576, 960 ]
+
+# non-maximum suppression
+conf_t: 0.25
+multi_label: False
+max_box: 30000
+max_wh: 7680
+iou_t: 0.7
+max_det: 300
+merge: False
+
+# semi precision
+half: False
+
+# ------------- valid -------------
+# loss
+alpha: 0.5
+beta: 6.0
+topk: 10
+box_w: 7.5
+cls_w: 0.5
+dfl_w: 1.5
+
+# ------------- train -------------
+# exponention moving average
+ema_decay: 0.9999
+tau: 8000
+
+# optimizer
+optim: SGD
+lr: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+
+# scheduler
+one_cycle: True
+lrf: 0.01
+
+# early stop
+patience: 50
+
+# warmup
+warmup_epoch: 3
+warmup_bias_lr: 0.1
+warmup_momentum: 0.8
+
+# dataloader
+total_batch_size: 64
+batch_size: 16
+epochs: 100
+njobs: 8
+
+# close epoch
+close_mosaic: 10
+
+# image augment
+mosaic: 1.0
+affine: 0.5
+hsv: 0.5
+flipud: 0
+fliplr: 0.5
+scale: 0.5
+translate: 0.1
+h: 0.015
+s: 0.7
+v: 0.4
+box_t: 5
+wh_rt: 10

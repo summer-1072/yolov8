@@ -83,20 +83,27 @@ class YOLOBI(nn.Module):
         self.c3f_3 = eval(network[6])
         self.p5 = eval(network[7])
         self.c3f_4 = eval(network[8])
-        self.sppf = eval(network[9])
+        self.p6 = eval(network[9])
+        self.c3f_5 = eval(network[10])
+        self.sppf = eval(network[11])
 
         # Neck
-        self.p6 = eval(network[10])
-        self.c3f_5 = eval(network[11])
         self.p7 = eval(network[12])
         self.c3f_6 = eval(network[13])
         self.p8 = eval(network[14])
         self.c3f_7 = eval(network[15])
         self.p9 = eval(network[16])
         self.c3f_8 = eval(network[17])
+        self.p10 = eval(network[18])
+        self.c3f_9 = eval(network[19])
+        self.p11 = eval(network[20])
+        self.c3f_10 = eval(network[21])
+        self.p12 = eval(network[22])
+        self.c3f_11 = eval(network[23])
 
         self.upsample1 = nn.Upsample(scale_factor=2, mode='nearest')
         self.upsample2 = nn.Upsample(scale_factor=2, mode='nearest')
+        self.upsample3 = nn.Upsample(scale_factor=2, mode='nearest')
 
         # Head
         ch1, ch2 = max(16, reg_max * 4, chs[0] // 4), max(len(cls), chs[0])
@@ -118,25 +125,30 @@ class YOLOBI(nn.Module):
         y7 = self.c3f_3(y6)
         y8 = self.p5(y7)
         y9 = self.c3f_4(y8)
-        y10 = self.sppf(y9)
+        y10 = self.p6(y9)
+        y11 = self.c3f_5(y10)
+        y12 = self.sppf(y11)
 
         # Neck
         # FPN UP
-        y11 = self.p6(y10)
-        y12 = torch.cat([self.upsample1(y11), y7], 1)
-        y13 = self.c3f_5(y12)
-        y14 = self.p7(y13)
-        y15 = torch.cat([self.upsample2(y14), y5], 1)
-        y16 = self.c3f_6(y15)
+        y13 = self.p7(y12)
+        y14 = self.c3f_6(torch.cat([self.upsample1(y13), y9], 1))
+
+        y15 = self.p8(y14)
+        y16 = self.c3f_7(torch.cat([self.upsample2(y15), y7], 1))
+
+        y17 = self.p9(y16)
+        y18 = self.c3f_8(torch.cat([self.upsample3(y17), y5], 1))
 
         # FPN DOWN
-        y17 = torch.cat([self.p8(y16), y14], 1)
-        y18 = self.c3f_7(y17)
-        y19 = torch.cat([self.p9(y18), y11], 1)
-        y20 = self.c3f_8(y19)
+        y19 = self.c3f_9(torch.cat([self.p10(y18), y17, y7], 1))
+
+        y20 = self.c3f_10(torch.cat([self.p11(y19), y15, y9], 1))
+
+        y21 = self.c3f_11(torch.cat([self.p12(y20), y13], 1))
 
         # Head
-        y = [y16, y18, y20]
+        y = [y18, y19, y20, y21]
         y = [torch.cat((self.conv1[i](y[i]), self.conv2[i](y[i])), 1) for i in range(len(y))]
 
         return self.anchor(y)
