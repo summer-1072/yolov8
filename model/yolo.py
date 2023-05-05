@@ -141,9 +141,9 @@ class YOLOBI(nn.Module):
         y18 = self.c3f_8(torch.cat([self.upsample3(y17), y5], 1))
 
         # FPN DOWN
-        y19 = self.c3f_9(torch.cat([self.p10(y18), y17, y7], 1))
+        y19 = self.c3f_9(torch.cat([self.p10(y18), y17], 1) + y7)
 
-        y20 = self.c3f_10(torch.cat([self.p11(y19), y15, y9], 1))
+        y20 = self.c3f_10(torch.cat([self.p11(y19), y15], 1) + y9)
 
         y21 = self.c3f_11(torch.cat([self.p12(y20), y13], 1))
 
