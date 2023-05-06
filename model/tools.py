@@ -44,3 +44,4 @@ def fuse_conv_bn(m):
     m.conv.bias.copy_(b_new)
 
     delattr(m, 'bn')
+

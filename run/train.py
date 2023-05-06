@@ -312,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
 
-    parser.add_argument('--log_dir', default='../log/train/train8')
+    parser.add_argument('--log_dir', default='')
     args = parser.parse_args()
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
