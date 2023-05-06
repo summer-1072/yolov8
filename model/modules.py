@@ -117,7 +117,9 @@ class Anchor(nn.Module):
             B, C, H, W = x[i].shape
             dtype, device = x[i].dtype, x[i].device
             grid_y, grid_x = torch.meshgrid(torch.arange(end=H, dtype=dtype, device=device) + 0.5,
-                                            torch.arange(end=W, dtype=dtype, device=device) + 0.5)
+                                            torch.arange(end=W, dtype=dtype, device=device) + 0.5,
+                                            indexing='ij')
+
             grids.append(torch.stack((grid_x, grid_y), 2).view(H * W, 2))
             grid_strides.append(torch.full((H * W, 1), stride, dtype=dtype, device=device))
 

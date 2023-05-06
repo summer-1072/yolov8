@@ -29,7 +29,7 @@ ema_decay: 0.9999
 tau: 8000
 
 # optimizer
-optim: SGD
+optim: Adam
 lr: 0.01
 momentum: 0.937
 weight_decay: 0.0005
