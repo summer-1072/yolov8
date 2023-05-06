@@ -109,7 +109,7 @@ class LossFun:
             top_mask = (top_metric.max(2, keepdim=True).values > self.eps).repeat([1, 1, self.topk])
 
         top_index[~top_mask] = 0
-        is_in_topk = torch.zeros(metric.shape, dtype=torch.int64, device=metric.device)
+        is_in_topk = torch.zeros(metric.shape, dtype=torch.int64, device=self.device)
         for i in range(self.topk):
             is_in_topk += F.one_hot(top_index[:, :, i], A)
 
@@ -185,4 +185,4 @@ class LossFun:
         loss[1] *= self.cls_w
         loss[2] *= self.dfl_w
 
-        return loss.sum() * pred_cls.shape[0], loss.detach()
+        return loss.sum() * pred_cls.shape[0], loss.detach().cpu().numpy()

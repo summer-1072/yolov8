@@ -18,6 +18,8 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from plot import plot_labels, plot_images
 
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 class EMA:  # exponential moving average
     def __init__(self, model, decay, tau):
@@ -98,7 +100,7 @@ def build_scheduler(optimizer, one_cycle, lrf, epochs):
 
 
 def save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, log_dir):
-    param = {'start_epoch': epoch, 'updates': ema.updates,
+    param = {'start_epoch': epoch + 1, 'updates': ema.updates,
              'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
 
     with open(os.path.join(log_dir, 'param.json'), 'w') as f:
@@ -132,9 +134,9 @@ def resume_record(model, ema, optimizer, scheduler, stopper, log_dir):
     best_epoch = param['best_epoch']
     best_fitness = param['best_fitness']
 
-    model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'model.pth')))
-    ema.model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'ema.pth')))
-    optimizer.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'optim.pth')))
+    model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'model.pth')).state_dict())
+    ema.model.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'ema.pth')).state_dict())
+    optimizer.load_state_dict(torch.load(os.path.join(log_dir, 'weight', 'optim.pth')).state_dict())
     ema.updates = updates
     scheduler.last_epoch = start_epoch - 1
     stopper.best_epoch = best_epoch
@@ -189,6 +191,7 @@ def train(args, device):
 
     # resume train
     if args.log_dir:
+        print('start resume train: ' + args.log_dir, file=sys.stderr)
         start_epoch = resume_record(model, ema, optimizer, scheduler, stopper, args.log_dir)
 
     # build log_dir
@@ -205,6 +208,7 @@ def train(args, device):
 
     # do train
     last_step = -1
+
     for epoch in range(start_epoch, hyp['epochs']):
         if epoch >= hyp['close_mosaic']:
             hyp['mosaic'] = 0.0
@@ -241,7 +245,6 @@ def train(args, device):
             with torch.cuda.amp.autocast(enabled=device != 'cpu'):
                 imgs = imgs.to(device, non_blocking=True).float() / 255
                 pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
-
                 loss, loss_items = loss_fun(labels, pred_cls, pred_box, pred_dist, grid, grid_stride)
                 loss_mean = (loss_mean * index + loss_items) / (index + 1) if loss_mean is not None else loss_items
 
@@ -309,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
 
-    parser.add_argument('--log_dir', default='')
+    parser.add_argument('--log_dir', default='../log/train/train8')
     args = parser.parse_args()
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'

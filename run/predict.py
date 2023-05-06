@@ -10,6 +10,8 @@ from collections import Counter
 from util import time_sync, color
 from box import letterbox, inv_letterbox, non_max_suppression
 
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 def annotate(img, pred, cls):
     if len(pred) > 0:
@@ -75,7 +77,6 @@ def predict(args, device):
     model = load_model(args.model_path, cls, args.weight_path, args.fused)
     model = model.half() if half else model.float()
     model.to(device)
-    model.eval()
 
     # build log_dir
     if not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0:
@@ -92,6 +93,7 @@ def predict(args, device):
         print('read image dir: %s, %d images' % (args.img_dir, num), file=sys.stderr)
 
         with torch.no_grad():
+            model.eval()
             for i, file in enumerate(files):
                 img = cv2.imread(os.path.join(args.img_dir, file))
                 img, info, t1, t2, t3, t4 = detect(img, hyp, model, half, cls, device)
@@ -113,6 +115,7 @@ def predict(args, device):
         print('read video dir: %s, %d videos' % (args.video_dir, len(files)), file=sys.stderr)
 
         with torch.no_grad():
+            model.eval()
             for file in files:
                 cap = cv2.VideoCapture(os.path.join(args.video_dir, file))
                 frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), int(cap.get(cv2.CAP_PROP_FPS))

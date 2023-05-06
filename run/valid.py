@@ -12,12 +12,13 @@ from dataset import LoadDataset
 from box import non_max_suppression
 from torch.utils.data import DataLoader
 
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 def valid(dataloader, model, hyp, device, training):
     half = hyp['half'] & (device != 'cpu')
 
     model = model.half() if half else model.float()
-    model.eval()
 
     metric = Metric(model.anchor.cls, device)
 
@@ -29,6 +30,7 @@ def valid(dataloader, model, hyp, device, training):
     pbar = tqdm(dataloader, file=sys.stderr)
 
     with torch.no_grad():
+        model.eval()
         for index, (imgs, img_infos, labels) in enumerate(pbar):
             t1 = time_sync()
             imgs = imgs.to(device, non_blocking=True)
