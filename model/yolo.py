@@ -105,6 +105,9 @@ class YOLOBI(nn.Module):
         self.upsample2 = nn.Upsample(scale_factor=2, mode='nearest')
         self.upsample3 = nn.Upsample(scale_factor=2, mode='nearest')
 
+        self.downsample1 = nn.MaxPool2d(kernel_size=2)
+        self.downsample2 = nn.MaxPool2d(kernel_size=2)
+
         # Head
         ch1, ch2 = max(16, reg_max * 4, chs[0] // 4), max(len(cls), chs[0])
 
@@ -141,9 +144,9 @@ class YOLOBI(nn.Module):
         y18 = self.c3f_8(torch.cat([self.upsample3(y17), y5], 1))
 
         # FPN DOWN
-        y19 = self.c3f_9(torch.cat([self.p10(y18), y17], 1) + y7)
+        y19 = self.c3f_9(torch.cat([self.p10(y18), y17, self.downsample1(y5)], 1))
 
-        y20 = self.c3f_10(torch.cat([self.p11(y19), y15], 1) + y9)
+        y20 = self.c3f_10(torch.cat([self.p11(y19), y15 , self.downsample1(y7)], 1))
 
         y21 = self.c3f_11(torch.cat([self.p12(y20), y13], 1))
 
