@@ -47,11 +47,11 @@ def fuse_conv_bn(m):
     delattr(m, 'bn')
 
 if __name__ == "__main__":
-    weight_path = '../log/train/train1/weight/best.pth'
+    weight_path = '../log/train/train2/weight/best.pth'
     weight = torch.load(weight_path)
 
     for m in weight.modules():
         if isinstance(m, Conv) and hasattr(m, 'bn'):
             fuse_conv_bn(m)
 
-    torch.save(weight, os.path.join('../config/weight', 'yolov8s.pth'))
+    torch.save(weight, os.path.join('../config/weight', 'yolov8x.pth'))

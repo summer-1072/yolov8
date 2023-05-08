@@ -13,6 +13,7 @@ from box import letterbox, inv_letterbox, non_max_suppression
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
+
 def annotate(img, pred, cls):
     if len(pred) > 0:
         objs = [[k, v] for k, v in dict(Counter(pred[:, 5].tolist())).items()]
@@ -143,12 +144,12 @@ def predict(args, device):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_dir', default='../dataset/bdd10k/images/test')
+parser.add_argument('--img_dir', default='')
 parser.add_argument('--video_dir', default='../dataset/bdd100k/videos/test')
-parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
-parser.add_argument('--model_path', type=str, default='../config/model/yolov8s.yaml')
-parser.add_argument('--weight_path', default='../log/train/train1/weight/ema.pth')
-parser.add_argument('--fused', type=bool, default=False)
+parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
+parser.add_argument('--model_path', type=str, default='../config/model/yolov8x.yaml')
+parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
+parser.add_argument('--fused', type=bool, default=True)
 parser.add_argument('--hyp_path', type=str, default='../config/hyp/hyp.yaml')
 parser.add_argument('--log_dir', type=str, default='../log/detect')
 args = parser.parse_args()
