@@ -37,12 +37,12 @@ def fuse_conv_bn(m):
     beta = bn.bias
     eps = bn.eps
 
-    w_new = torch.mm(torch.diag(gamma.div(torch.sqrt(eps + var))), w).view(conv.weight.shape)
-    b_new = gamma.div(torch.sqrt(eps + var)) * (b - mean) + beta
+    w_new = nn.Parameter(torch.mm(torch.diag(gamma.div(torch.sqrt(eps + var))), w).view(conv.weight.shape))
+    b_new = nn.Parameter(gamma.div(torch.sqrt(eps + var)) * (b - mean) + beta)
 
     m.conv.requires_grad_(False)
-    m.conv.weight.copy_(w_new)
-    m.conv.bias.copy_(b_new)
+    m.conv.weight = w_new
+    m.conv.bias = b_new
 
     delattr(m, 'bn')
 
