@@ -54,7 +54,7 @@ def read_labels(file):
             indices.append(index)
             line = lines[index].replace('\n', '').split('  ')
             imgs.append(line[0])
-            labels.append(np.array([[float(i) for i in obj.split(',')] for obj in line[1:]]))
+            labels.append(np.array([[float(i) for i in obj.split(',')] for obj in line[1:]], dtype=np.float32))
 
     return indices, imgs, labels
 
