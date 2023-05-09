@@ -21,6 +21,7 @@ from plot import plot_labels, plot_images
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
+
 class EMA:  # exponential moving average
     def __init__(self, model, decay, tau):
         self.model = deepcopy(model).eval()
@@ -101,7 +102,7 @@ def build_scheduler(optimizer, one_cycle, lrf, epochs):
 
 def save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, log_dir):
     param = {'start_epoch': epoch + 1, 'updates': ema.updates,
-             'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
+             'best_epoch': stopper.best_epoch + 1, 'best_fitness': stopper.best_fitness}
 
     with open(os.path.join(log_dir, 'param.json'), 'w') as f:
         json.dump(param, f)
