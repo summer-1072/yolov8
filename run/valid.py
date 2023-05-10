@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
 
+
 def valid(dataloader, model, hyp, device, training):
     half = hyp['half'] & (device != 'cpu')
 
@@ -90,7 +91,7 @@ if __name__ == "__main__":
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused)
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
     model.to(device)
     model.eval()
 

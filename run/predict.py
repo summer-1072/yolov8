@@ -75,7 +75,7 @@ def predict(args, device):
     half = hyp['half'] & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused)
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
     model = model.half() if half else model.float()
     model.to(device)
 

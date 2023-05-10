@@ -154,7 +154,7 @@ def train(args, device):
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused)
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
     model.to(device)
 
     # ema
@@ -307,9 +307,8 @@ if __name__ == "__main__":
     parser.add_argument('--val_img_dir', default='../dataset/bdd10k/images/val')
     parser.add_argument('--val_label_path', default='../dataset/bdd10k/labels/val.txt')
     parser.add_argument('--cls_path', default='../dataset/bdd10k/cls.yaml')
-
     parser.add_argument('--hyp_path', default='../config/hyp/hyp_bi.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolobis.yaml')
+    parser.add_argument('--model_path', default='../config/model/yolobix.yaml')
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
 
