@@ -147,6 +147,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--img_dir', default='')
 parser.add_argument('--video_dir', default='../dataset/bdd100k/videos/test')
 parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
+
 parser.add_argument('--model_path', type=str, default='../config/model/yolov8x.yaml')
 parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
 parser.add_argument('--fused', type=bool, default=True)

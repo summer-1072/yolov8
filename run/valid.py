@@ -76,8 +76,8 @@ if __name__ == "__main__":
     parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8x.yaml')
-    parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
+    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
+    parser.add_argument('--weight_path', default='../config/weight/yolov8s.pth')
     parser.add_argument('--fused', default=True)
 
     args = parser.parse_args()
