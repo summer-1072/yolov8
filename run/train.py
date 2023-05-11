@@ -4,6 +4,7 @@ import yaml
 import json
 import math
 import torch
+import shutil
 import argparse
 import numpy as np
 from torch import nn
@@ -203,6 +204,10 @@ def train(args, device):
         os.makedirs(args.log_dir, exist_ok=True)
         os.makedirs(os.path.join(args.log_dir, 'weight'), exist_ok=True)
         os.makedirs(os.path.join(args.log_dir, 'sample'), exist_ok=True)
+        os.makedirs(os.path.join(args.log_dir, 'conf'), exist_ok=True)
+
+        shutil.copy(args.hyp_path, os.path.join(args.log_dir, 'conf', args.hyp_path.split('/')[-1]))
+        shutil.copy(args.model_path, os.path.join(args.log_dir, 'conf', args.model_path.split('/')[-1]))
 
     # plot labels
     plot_labels(train_dataset.labels, val_dataset.labels, model.anchor.cls, os.path.join(args.log_dir, 'labels.jpg'))
