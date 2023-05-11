@@ -103,7 +103,7 @@ def build_scheduler(optimizer, one_cycle, lrf, epochs):
 
 def save_record(epoch, model, ema, optimizer, stopper, best_pth, metrics, log_dir):
     param = {'start_epoch': epoch + 1, 'updates': ema.updates,
-             'best_epoch': stopper.best_epoch + 1, 'best_fitness': stopper.best_fitness}
+             'best_epoch': stopper.best_epoch, 'best_fitness': stopper.best_fitness}
 
     with open(os.path.join(log_dir, 'param.json'), 'w') as f:
         json.dump(param, f)
@@ -205,7 +205,6 @@ def train(args, device):
         os.makedirs(os.path.join(args.log_dir, 'weight'), exist_ok=True)
         os.makedirs(os.path.join(args.log_dir, 'sample'), exist_ok=True)
         os.makedirs(os.path.join(args.log_dir, 'conf'), exist_ok=True)
-
         shutil.copy(args.hyp_path, os.path.join(args.log_dir, 'conf', args.hyp_path.split('/')[-1]))
         shutil.copy(args.model_path, os.path.join(args.log_dir, 'conf', args.model_path.split('/')[-1]))
 
