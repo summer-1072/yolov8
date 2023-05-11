@@ -61,7 +61,8 @@ def valid(dataloader, model, hyp, device, training):
             model.float()
 
         else:
-            print(f'speed: ({cost / len(dataloader.dataset):.3})s per image', file=sys.stderr)
+            print(f'speed: {cost / len(dataloader.dataset):.3}s per image, ',
+                  f'{len(dataloader.dataset) / cost:.3} fps', file=sys.stderr)
             metric.print_details()
 
         loss_record = [round(x, 4) for x in loss_mean.tolist()]
@@ -76,8 +77,8 @@ if __name__ == "__main__":
     parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
-    parser.add_argument('--weight_path', default='../config/weight/yolov8s.pth')
+    parser.add_argument('--model_path', default='../config/model/yolov8m.yaml')
+    parser.add_argument('--weight_path', default='../config/weight/yolov8m.pth')
     parser.add_argument('--fused', default=True)
 
     args = parser.parse_args()

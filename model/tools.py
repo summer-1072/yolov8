@@ -65,4 +65,4 @@ if __name__ == "__main__":
         if isinstance(m, Conv) and hasattr(m, 'bn'):
             fuse_conv_bn(m)
 
-    torch.save(weight, os.path.join('../config/weight', 'yolov8x.pth'))
+    torch.save(weight, os.path.join('../config/weight', 'yolov8m.pth'))

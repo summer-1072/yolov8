@@ -105,10 +105,11 @@ def predict(args, device):
                 d3 += t4 - t3
                 print('image %d/%d' % (i + 1, num), file, info, f'({t4 - t1:.3})s', file=sys.stderr)
 
-        sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per image'
+        sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per frame, %s fps'
         d1, d2, d3 = (d1 / num), (d2 / num), (d3 / num)
         d4 = d1 + d2 + d3
-        print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s'), file=sys.stderr)
+        print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s', f'{(1 / d4):.3f}s'),
+              file=sys.stderr)
 
     # predict video
     elif args.video_dir:
@@ -137,10 +138,11 @@ def predict(args, device):
                     d3 += t4 - t3
                     print('frame %d/%d' % (i + 1, num), info, f'({t4 - t1:.3})s', file=sys.stderr)
 
-                sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per frame'
+                sentence = 'speed: %s pre-process, %s model-process, %s post-process, %s per frame, %s fps'
                 d1, d2, d3 = (d1 / num), (d2 / num), (d3 / num)
                 d4 = d1 + d2 + d3
-                print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s'), file=sys.stderr)
+                print(sentence % (f'{(d1):.3f}s', f'{(d2):.3f}s', f'{(d3):.3f}s', f'{(d4):.3f}s', f'{(1 / d4):.3f}s'),
+                      file=sys.stderr)
 
 
 parser = argparse.ArgumentParser()
