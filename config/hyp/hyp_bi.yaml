@@ -35,7 +35,7 @@ momentum: 0.937
 weight_decay: 0.0005
 
 # scheduler
-one_cycle: True
+one_cycle: False
 lrf: 0.01
 
 # early stop
