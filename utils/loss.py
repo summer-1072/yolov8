@@ -70,7 +70,7 @@ class LossFun:
                     out[index, :num] = labels[matches, 1:]
 
         label_cls, label_box = out.split((1, 4), 2)
-        label_mask = torch.gt(out.sum(2, keepdim=True), 0).to(torch.int64)
+        label_mask = torch.gt(out.sum(2, keepdim=True), 0).to(torch.long)
 
         return label_cls, label_box, label_mask
 
@@ -82,14 +82,14 @@ class LossFun:
         left_top, right_bottom = label_box.view(-1, 1, 4).chunk(2, 2)
         deltas = torch.cat((grid.unsqueeze(0) - left_top, right_bottom - grid.unsqueeze(0)), 2).view(B, T, A, 4)
 
-        match_mask = torch.gt(deltas.amin(3), self.eps).to(torch.int64)
+        match_mask = torch.gt(deltas.amin(3), self.eps).to(torch.long)
 
         # cal metric
         mask = (label_mask * match_mask).bool()
         cls = torch.zeros([B, T, A], dtype=pred_cls.dtype, device=self.device)
         iou = torch.zeros([B, T, A], dtype=pred_box.dtype, device=self.device)
 
-        index = torch.zeros([2, B, T], dtype=torch.int64)
+        index = torch.zeros([2, B, T], dtype=torch.long)
         index[0] = torch.arange(B).view(-1, 1).repeat(1, T)
         index[1] = label_cls.squeeze(2)
         cls[mask] = pred_cls[index[0], :, index[1]][mask]
@@ -109,7 +109,7 @@ class LossFun:
             top_mask = (top_metric.max(2, keepdim=True).values > self.eps).repeat([1, 1, self.topk])
 
         top_index[~top_mask] = 0
-        is_in_topk = torch.zeros(metric.shape, dtype=torch.int64, device=self.device)
+        is_in_topk = torch.zeros(metric.shape, dtype=torch.long, device=self.device)
         for i in range(self.topk):
             is_in_topk += F.one_hot(top_index[:, :, i], A)
 
@@ -150,9 +150,9 @@ class LossFun:
         norm_metric = (metric * iou_max / (metric_max + self.eps)).amax(1).unsqueeze(2)
 
         # target cls
-        batch_index = torch.arange(B, dtype=torch.int64, device=self.device).unsqueeze(1)
+        batch_index = torch.arange(B, dtype=torch.long, device=self.device).unsqueeze(1)
         mask_max = mask.argmax(1) + batch_index * T
-        target_cls = label_cls.flatten()[mask_max].clamp(0).to(torch.int64)
+        target_cls = label_cls.flatten()[mask_max].clamp(0).to(torch.long)
 
         # target score
         target_score = F.one_hot(target_cls, num_cls)
