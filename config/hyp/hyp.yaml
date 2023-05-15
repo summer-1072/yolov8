@@ -1,6 +1,6 @@
 # ------------- predict -------------
 # image size
-shape: [ 384, 960 ]
+shape: [ 544, 960 ]
 
 # non-maximum suppression
 conf_t: 0.25
