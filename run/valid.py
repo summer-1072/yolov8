@@ -12,9 +12,6 @@ from dataset import LoadDataset
 from box import non_max_suppression
 from torch.utils.data import DataLoader
 
-torch.backends.cudnn.enabled = True
-torch.backends.cudnn.benchmark = True
-
 
 def valid(dataloader, model, hyp, device, training):
     half = hyp['half'] & (device != 'cpu')
@@ -77,8 +74,8 @@ if __name__ == "__main__":
     parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
 
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
-    parser.add_argument('--weight_path', default='../config/weight/yolov8s.pth')
+    parser.add_argument('--model_path', default='../config/model/yolov8x.yaml')
+    parser.add_argument('--weight_path', default='../config/weight/yolov8x.pth')
     parser.add_argument('--fused', default=True)
 
     args = parser.parse_args()

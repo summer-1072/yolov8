@@ -10,9 +10,6 @@ from collections import Counter
 from util import time_sync, color
 from box import letterbox, inv_letterbox, non_max_suppression
 
-torch.backends.cudnn.enabled = True
-torch.backends.cudnn.benchmark = True
-
 
 def annotate(img, pred, cls):
     if len(pred) > 0:
@@ -39,7 +36,6 @@ def annotate(img, pred, cls):
 
 def detect(ori_img, hyp, model, half, cls, device):
     t1 = time_sync()
-
     pre_img, ratio, offset = letterbox(ori_img, hyp['shape'], model.anchor.strides[-1])
     pre_img = np.ascontiguousarray(pre_img.transpose((2, 0, 1))[::-1])  # HWC to CHW, BGR to RGB
     pre_img = torch.from_numpy(pre_img).to(device)
