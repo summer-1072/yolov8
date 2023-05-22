@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     metric = Metric(['car', 'person', 'bike'], device)
 
-    preds = torch.cat((pred_box * grid_stride, pred_cls), 2)
+    preds = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
 
     loss_items = torch.zeros(3, device=device)
 
