@@ -10,13 +10,13 @@ We released the largest and most diverse driving video dataset with rich annotat
 
 <img alt="BDD100K.png" src="assert%2FBDD100K.png" width="1500"/>
 
-| Model                                                                                | size(width * height) | mAP50-95 val | Speed A100 NoTensorRT FP32(ms) | params(M) | FLOPs(G) |
-|--------------------------------------------------------------------------------------|----------------------|--------------|--------------------------------|-----------|----------|
-| [YOLOv8s](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt) | 960 * 544            | 38.4         | 5.8                            | 11.1      | 36.3     |
-| [YOLOv8m](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt) | 960 * 544            | 40.2         | 6.1                            | 25.8      | 100.4    |
-| [YOLOv8l](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt) | 960 * 544            | 40.9         | 8.6                            | 43.6      | 210.2    |
-| [YOLOv8x](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt) | 960 * 544            | 41.0         | 10.1                           | 68.1      | 328.2    |
-| [YOLOBis](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 39.5         | 3.6                            | 19.1      | 65.1     |
-| [YOLOBim](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 40.9         | 7.0                            | 58.2      | 197.3    |
-| [YOLOBil](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 41.5         | 18.0                           | 72.7      | 329.0    |
-| [YOLOBix](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 42.0         | 19.4                           | 113.5     | 513.7    |
+| Model                                                                                | size(width * height) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
+|--------------------------------------------------------------------------------------|----------------------|--------------|---------------------|-----------|----------|
+| [YOLOv8s](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt) | 960 * 544            | 38.4         | 5.8                 | 11.1      | 36.3     |
+| [YOLOv8m](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt) | 960 * 544            | 40.2         | 6.1                 | 25.8      | 100.4    |
+| [YOLOv8l](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt) | 960 * 544            | 40.9         | 8.6                 | 43.6      | 210.2    |
+| [YOLOv8x](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt) | 960 * 544            | 41.0         | 10.1                | 68.1      | 328.2    |
+| [YOLOBis](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 39.5         | 3.6                 | 19.1      | 65.1     |
+| [YOLOBim](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 40.9         | 7.0                 | 58.2      | 197.3    |
+| [YOLOBil](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 41.5         | 18.0                | 72.7      | 329.0    |
+| [YOLOBix](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704           | 42.0         | 19.4                | 113.5     | 513.7    |
