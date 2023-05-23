@@ -1,9 +1,6 @@
 # yolov8
 
 
-![20230523-122942.jpg](..%2F..%2F20230523-122942.jpg)
+![bdd100k.jpg](assert%2Fbdd100k.jpg)
 
-
-
-
-![Figure_1.png](..%2F..%2FFigure_1.png)
+![performance.png](assert%2Fperformance.png)
