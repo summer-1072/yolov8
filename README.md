@@ -10,7 +10,7 @@ Dataset: We released the largest and most diverse driving video dataset with ric
 
 <img alt="BDD100K.png" src="assert%2FBDD100K.png" width="1500"/>
 
-Weight:
+Weight: We have provided pre training weights for everyone to use.
 
 | Model                                                                                | size(w * h) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
 |--------------------------------------------------------------------------------------|-------------|--------------|---------------------|-----------|----------|
@@ -22,3 +22,10 @@ Weight:
 | [YOLOBim](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 40.9         | 5.8                 | 58.2      | 197.3    |
 | [YOLOBil](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 41.5         | 7.5                 | 72.7      | 329.0    |
 | [YOLOBix](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 42.0         | 11.1                | 113.5     | 513.7    |
+
+
+Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
+
+Use: You can start executing the program from the run folder, which contains YOLOv8 training, verification, and inference functions.
+For example, you can execute "python train.py" to train your YOLOv8
+

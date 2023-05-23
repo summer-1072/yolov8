@@ -1,7 +1,6 @@
 /.idea/*
 /dataset/*
 /log/*
-/config/weight/*
 /model/__pycache__/
 /utils/__pycache__/
 /run/__pycache__/
