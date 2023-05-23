@@ -308,13 +308,12 @@ if __name__ == "__main__":
     parser.add_argument('--val_img_dir', default='../dataset/bdd100k/images/val')
     parser.add_argument('--val_label_path', default='../dataset/bdd100k/labels/val.txt')
     parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
-
-    parser.add_argument('--hyp_path', default='../config/hyp/hyp_bi.yaml')
-    parser.add_argument('--model_path', default='../config/model/yolobix.yaml')
+    parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
+    parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
     parser.add_argument('--weight_path', default='')
     parser.add_argument('--fused', default=False)
-
     parser.add_argument('--log_dir', default='')
+
     args = parser.parse_args()
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
