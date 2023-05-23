@@ -30,11 +30,11 @@ def valid(dataloader, model, hyp, device, training):
     with torch.no_grad():
         model.eval()
         for index, (imgs, img_infos, labels) in enumerate(pbar):
-            t1 = time_sync()
             imgs = imgs.to(device, non_blocking=True)
             imgs = (imgs.half() if half else imgs.float()) / 255
             labels = labels.to(device)
 
+            t1 = time_sync()
             pred_box, pred_cls, pred_dist, grid, grid_stride = model(imgs)
             preds = torch.cat((pred_box * grid_stride, pred_cls.sigmoid()), 2)
             preds = non_max_suppression(preds, hyp['conf_t'], hyp['multi_label'], hyp['max_box'],
