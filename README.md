@@ -10,7 +10,7 @@ Dataset: We released the largest and most diverse driving video dataset with ric
 
 <img alt="BDD100K.png" src="assert%2Fbdd100k.png" width="1500"/>
 
-[bdd100k.mp4](assert%2Fbdd100k.mp4)
+https://github.com/summer-1072/yolov8/blob/main/assert/bdd100k.mp4
 
 Weight: We have provided pre training weights for everyone to use.
 
