@@ -10,20 +10,21 @@ Dataset: We released the largest and most diverse driving video dataset with ric
 
 <img alt="BDD100K.png" src="assert%2Fbdd100k.png" width="1500"/>
 
+Show: We have presented some of the results of model inference to observe the detection effect in actual driving roads.
 ![bdd100k.gif](assert%2Fbdd100k.gif)
 
-Weight: We have provided pre training weights for everyone to use.
+Weight: We have provided pre training weights for everyone to use. 
 
-| Model                                                                                | size(w * h) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
-|--------------------------------------------------------------------------------------|-------------|--------------|---------------------|-----------|----------|
-| [YOLOv8s](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt) | 960 * 544   | 38.4         | 2.5                 | 11.1      | 36.3     |
-| [YOLOv8m](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt) | 960 * 544   | 40.2         | 3.5                 | 25.8      | 100.4    |
-| [YOLOv8l](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt) | 960 * 544   | 40.9         | 4.8                 | 43.6      | 210.2    |
-| [YOLOv8x](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt) | 960 * 544   | 41.0         | 6.5                 | 68.1      | 328.2    |
-| [YOLOBis](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 39.5         | 3.5                 | 19.1      | 65.1     |
-| [YOLOBim](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 40.9         | 5.8                 | 58.2      | 197.3    |
-| [YOLOBil](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 41.5         | 7.5                 | 72.7      | 329.0    |
-| [YOLOBix](https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt) | 1280 * 704  | 42.0         | 11.1                | 113.5     | 513.7    |
+| Model    | size(w * h) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
+|----------|-------------|--------------|---------------------|-----------|----------|
+| YOLOv8s  | 960 * 544   | 38.4         | 2.5                 | 11.1      | 36.3     |
+| YOLOv8m  | 960 * 544   | 40.2         | 3.5                 | 25.8      | 100.4    |
+| YOLOv8l  | 960 * 544   | 40.9         | 4.8                 | 43.6      | 210.2    |
+| YOLOv8x  | 960 * 544   | 41.0         | 6.5                 | 68.1      | 328.2    |
+| YOLOBis  | 1280 * 704  | 39.5         | 3.5                 | 19.1      | 65.1     |
+| YOLOBim  | 1280 * 704  | 40.9         | 5.8                 | 58.2      | 197.3    |
+| YOLOBil  | 1280 * 704  | 41.5         | 7.5                 | 72.7      | 329.0    |
+| YOLOBix  | 1280 * 704  | 42.0         | 11.1                | 113.5     | 513.7    |
 
 
 Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
