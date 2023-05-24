@@ -11,7 +11,8 @@ Dataset: We released the largest and most diverse driving video dataset with ric
 <img alt="BDD100K.png" src="assert%2Fbdd100k.png" width="1500"/>
 
 Show: We have presented some of the results of model inference to observe the detection effect in actual driving roads.
-![bdd100k.gif](assert%2Fbdd100k.gif)
+
+<img alt="bdd100k.gif" src="assert%2Fbdd100k.gif" width="1280"/>
 
 Weight: We have provided pre training weights for everyone to use. 
 
