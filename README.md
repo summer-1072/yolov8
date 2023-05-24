@@ -62,7 +62,6 @@ Use:
 1) Download Dataset Address: https://bdd-data.berkeley.edu/
    You can download the data and place it in the following directory structure. The images folder contains images related to train, val, and test, the labels folder contains label files related to train and val, and the videos folder contains video files that require inference.
    <img alt="data.png" src="assert%2Fdata.png"/>
-   
    Run "python /utils/dataset.py" to generate train and val data labels that are compatible with YOLO in the labels folder
 
 2) Train Model run "python /run/train.py" to train model.
@@ -73,5 +72,5 @@ Use:
 
 5) Predict run "python /run/predict.py" to predict data, the model supports inference functions for images and videos.
 
-If you want to directly use the trained model to infer on the BDD100K dataset, please download the model weights directly from the above address and place them in the following directory structure.
-<img alt="weight.jpg" src="assert%2Fweight.jpg"/>
+6) If you want to directly use the trained model to infer on the BDD100K dataset, please download the model weights directly from the above address and place them in the following directory structure.
+   <img alt="weight.jpg" src="assert%2Fweight.jpg"/>
