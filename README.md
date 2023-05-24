@@ -14,7 +14,7 @@ Show: We used the model to infer a portion of the data to demonstrate the actual
 
 <img alt="bdd100k.gif" src="assert%2Fbdd100k.gif" width="1280"/>
 
-Weight: We have provided pre training weights for everyone to use. We have provided a download address for the dataset and pre trained model weights.
+Weight and Dataset: We have provided pre training weights for everyone to use. We have provided a download address for the dataset and pre trained model weights.
 Address: https://pan.baidu.com/s/1gnPDkFhPCL7-n4Y_VME2yw   password: 1111
 
 | Model    | size(w * h) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
@@ -62,10 +62,11 @@ Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
 Use:
 1) Download Dataset Address: https://bdd-data.berkeley.edu/
    You can download the data and place it in the following directory structure. The images folder contains images related to train, val, and test, the labels folder contains label files related to train and val, and the videos folder contains video files that require inference.
-   
+   You can also download the dataset directly from Baidu Netdisk. Address: https://pan.baidu.com/s/1gnPDkFhPCL7-n4Y_VME2yw   password: 1111
+ 
    <img alt="data.png" src="assert%2Fdata.png"/>
   
-   run "python /utils/dataset.py" to generate train and val data labels that are compatible with YOLO in the labels folder
+   run "python /utils/dataset.py" to generate train and val data labels that are compatible with YOLO in the labels folder.
 
 2) Train Model run "python /run/train.py" to train model.
 
