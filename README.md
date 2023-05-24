@@ -77,4 +77,5 @@ Use:
 5) Predict run "python /run/predict.py" to predict data, the model supports inference functions for images and videos.
 
 6) If you want to directly use the trained model to infer on the BDD100K dataset, please download the model weights directly from the above address and place them in the following directory structure.
+   
    <img alt="weight.jpg" src="assert%2Fweight.jpg"/>
