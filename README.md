@@ -30,6 +30,5 @@ Weight: We have provided pre training weights for everyone to use.
 
 Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
 
-Use: You can start executing the program from the run folder, which contains YOLOv8 training, verification, and inference functions.
-For example, you can execute "python train.py" to train your YOLOv8
+Use:
 

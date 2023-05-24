@@ -1,7 +1,9 @@
 /.idea/*
-/dataset/*
+/dataset/bdd100k/images/*
+/dataset/bdd100k/labels/*
+/dataset/bdd100k/videos/*
 /log/*
 /model/__pycache__/
 /utils/__pycache__/
 /run/__pycache__/
-/.DS_Store
+.DS_Store
