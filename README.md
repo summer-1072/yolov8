@@ -59,21 +59,19 @@ We provide detection results for YOLOv8s and YOLOBix in each category to evaluat
 Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
 
 Use:
-1) Download Dataset 
-   Address: https://bdd-data.berkeley.edu/
+1) Download Dataset Address: https://bdd-data.berkeley.edu/
    You can download the data and place it in the following directory structure. The images folder contains images related to train, val, and test, the labels folder contains label files related to train and val, and the videos folder contains video files that require inference.
-   ![data.png](assert%2Fdata.png)
+   <img alt="data.png" src="assert%2Fdata.png"/>
    
    Run "python /utils/dataset.py" to generate train and val data labels that are compatible with YOLO in the labels folder
 
-2) Train Model
-   Run "python /run/train.py" to train model.
+2) Train Model run "python /run/train.py" to train model.
 
-3) Fuse Conv and BN
-   Run "python /model/tools.py" to fuse Conv and BN layer.
+3) Fuse Conv and BN run "python /model/tools.py" to fuse Conv and BN layer.
 
-4) Valid Model
-   Run "python /run/valid.py" to valid model performance.
+4) Valid Model run "python /run/valid.py" to valid model performance.
 
-5) Predict
-   Run "python /run/predict.py" to predict data, the model supports inference functions for images and videos.
+5) Predict run "python /run/predict.py" to predict data, the model supports inference functions for images and videos.
+
+If you want to directly use the trained model to infer on the BDD100K dataset, please download the model weights directly from the above address and place them in the following directory structure.
+<img alt="weight.jpg" src="assert%2Fweight.jpg"/>
