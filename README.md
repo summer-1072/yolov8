@@ -12,7 +12,7 @@ Dataset: We released the largest and most diverse driving video dataset with ric
 
 Show: We used the model to infer a portion of the data to demonstrate the actual detection effect.
 
-![bdd100k.gif](assert%2Fbdd100k.gif)
+<img alt="bdd100k.gif" src="assert%2Fbdd100k.gif" width="1280"/>
 
 Weight: We have provided pre training weights for everyone to use. 
 
