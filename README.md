@@ -27,9 +27,6 @@ Weight: We have provided pre training weights for everyone to use.
 | YOLOBil  | 1280 * 704  | 41.5         | 7.5                 | 72.7      | 329.0    |
 | YOLOBix  | 1280 * 704  | 42.0         | 11.1                | 113.5     | 513.7    |
 
-
-
-
 We provide detection results for YOLOv8s and YOLOBix in each category to evaluate the upper and lower limits of the model detection ability.
 
 | class        | instances | YOLOv8s P | YOLOv8s R | YOLOv8s mAP50 | YOLOv8s mAP50-95 |
@@ -45,20 +42,18 @@ We provide detection results for YOLOv8s and YOLOBix in each category to evaluat
 | traffic sign | 33914     | 0.7506    | 0.6633    | 0.7312        | 0.4535           |
 | traffic light| 24869     | 0.7392    | 0.6573    | 0.7117        | 0.3312           |
 
-
-
-| class        | instances | YOLOBix P | YOLOBix R  | YOLOBix mAP50 | YOLOBix mAP50-95 |
-|--------------|-----------|-----------|------------|---------------|------------------|
-| person       | 13220     | 0.7481    | 0.6965     | 0.7655        | 0.4649           |
-| bike         | 1004      | 0.6182    | 0.5627     | 0.6192        | 0.3721           |
-| car          | 102341    | 0.813     | 0.8018     | 0.854         | 0.6016           |
-| motor        | 449       | 0.6687    | 0.4944     | 0.5927        | 0.3467           |
-| rider        | 648       | 0.712     | 0.5417     | 0.6597        | 0.4043           |
-| bus          | 1597      | 0.7023    | 0.6293     | 0.7128        | 0.6029           |
-| train        | 14        | 0.0       | 0.0        | 0.0           | 0.0              |
-| truck        | 4241      | 0.6836    | 0.6496     | 0.7008        | 0.5588           |
-| traffic sign | 34615     | 0.7155    | 0.756      | 0.7751        | 0.4807           |
-| traffic light| 26355     | 0.7349    | 0.7275     | 0.7488        | 0.3508           |
+| class        | instances | YOLOBix P | YOLOBix R | YOLOBix mAP50 | YOLOBix mAP50-95 |
+|--------------|-----------|-----------|-----------|---------------|------------------|
+| person       | 13220     | 0.7481    | 0.6965    | 0.7655        | 0.4649           |
+| bike         | 1004      | 0.6182    | 0.5627    | 0.6192        | 0.3721           |
+| car          | 102341    | 0.813     | 0.8018    | 0.854         | 0.6016           |
+| motor        | 449       | 0.6687    | 0.4944    | 0.5927        | 0.3467           |
+| rider        | 648       | 0.712     | 0.5417    | 0.6597        | 0.4043           |
+| bus          | 1597      | 0.7023    | 0.6293    | 0.7128        | 0.6029           |
+| train        | 14        | 0.0       | 0.0       | 0.0           | 0.0              |
+| truck        | 4241      | 0.6836    | 0.6496    | 0.7008        | 0.5588           |
+| traffic sign | 34615     | 0.7155    | 0.756     | 0.7751        | 0.4807           |
+| traffic light| 26355     | 0.7349    | 0.7275    | 0.7488        | 0.3508           |
 
 
 Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
@@ -66,5 +61,19 @@ Requirement: We suggest using Python =3.8, torch >=1.10.0, cuda >=11.3.
 Use:
 1) Download Dataset 
    Address: https://bdd-data.berkeley.edu/
+   You can download the data and place it in the following directory structure. The images folder contains images related to train, val, and test, the labels folder contains label files related to train and val, and the videos folder contains video files that require inference.
+   ![data.png](assert%2Fdata.png)
+   
+   Run "python /utils/dataset.py" to generate train and val data labels that are compatible with YOLO in the labels folder
 
-2) 
+2) Train Model
+   Run "python /run/train.py" to train model.
+
+3) Fuse Conv and BN
+   Run "python /model/tools.py" to fuse Conv and BN layer.
+
+4) Valid Model
+   Run "python /run/valid.py" to valid model performance.
+
+5) Predict
+   Run "python /run/predict.py" to predict data, the model supports inference functions for images and videos.
