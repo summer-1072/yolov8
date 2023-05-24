@@ -14,7 +14,8 @@ Show: We used the model to infer a portion of the data to demonstrate the actual
 
 <img alt="bdd100k.gif" src="assert%2Fbdd100k.gif" width="1280"/>
 
-Weight: We have provided pre training weights for everyone to use. 
+Weight: We have provided pre training weights for everyone to use. We have provided a download address for the dataset and pre trained model weights.
+Address: https://pan.baidu.com/s/1gnPDkFhPCL7-n4Y_VME2yw   password: 1111
 
 | Model    | size(w * h) | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
 |----------|-------------|--------------|---------------------|-----------|----------|
