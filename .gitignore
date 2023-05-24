@@ -6,4 +6,4 @@
 /model/__pycache__/
 /utils/__pycache__/
 /run/__pycache__/
-.DS_Store
+/.DS_Store
