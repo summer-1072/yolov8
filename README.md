@@ -8,7 +8,7 @@ Finally, we designed the YOLOBI network to try to optimize the effectiveness of 
 
 Dataset: We released the largest and most diverse driving video dataset with rich annotations called BDD100K. You can access the data for research now at http://bdd-data.berkeley.edu. We have recently released an arXiv report on it. And there is still time to participate in our CVPR 2018 challenges!
 
-<img alt="BDD100K.png" src="assert%2Fbdd100k.png" width="1500"/>
+<img alt="BDD100K.png" src="assert%2Fbdd100k.png" width="1280"/>
 
 Show: We used the model to infer a portion of the data to demonstrate the actual detection effect.
 
