@@ -124,7 +124,7 @@ class Metric:
                                          self.metrics['metric/mAP50'], self.metrics['metric/mAP50-95'])
 
     def print_details(self):
-        print((' ' * 6).join([str(x).ljust(20) for x in ['class', 'instances', 'P', 'R', 'mAP50', 'mAP50-95']]),
+        print((' ' * 6).join([str(x).ljust(20) for x in ['class', 'instances', 'P', 'R', 'AP50', 'AP50-95']]),
               file=sys.stderr)
 
         for i in range(len(self.cls)):
