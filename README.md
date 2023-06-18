@@ -18,16 +18,16 @@ Weight and Dataset: We have provided pre training weights for everyone to use. W
 Address: https://pan.baidu.com/s/1gnPDkFhPCL7-n4Y_VME2yw   password: 1111
 
 
-| Model    | size(w * h) | mAP50 val | mAP50-95 val | Speed A100 FP16(ms) | params(M) | FLOPs(G) |
-|----------|-------------|-----------|--------------|---------------------|-----------|----------|
-| YOLOv8s  | 960 * 544   | 60.0      | 38.4         | 2.5                 | 11.1      | 36.3     |
-| YOLOv8m  | 960 * 544   | 62.1      | 40.2         | 3.5                 | 25.8      | 100.4    |
-| YOLOv8l  | 960 * 544   | 63.2      | 40.9         | 4.8                 | 43.6      | 210.2    |
-| YOLOv8x  | 960 * 544   | 63.2      | 41.0         | 6.5                 | 68.1      | 328.2    |
-| YOLOBis  | 1280 * 704  | 61.2      | 39.5         | 3.5                 | 19.1      | 65.1     |
-| YOLOBim  | 1280 * 704  | 63.2      | 40.9         | 5.8                 | 58.2      | 197.3    |
-| YOLOBil  | 1280 * 704  | 63.6      | 41.5         | 7.5                 | 72.7      | 329.0    |
-| YOLOBix  | 1280 * 704  | 64.3      | 42.0         | 11.1                | 113.5     | 513.7    |
+| Model    | size(w * h) | mAP50 | mAP50-95| Speed A100 FP16(ms) | params(M) | FLOPs(G) |
+|----------|-------------|-------|---------|---------------------|-----------|----------|
+| YOLOv8s  | 960 * 544   | 60.0  | 38.4    | 2.5                 | 11.1      | 36.3     |
+| YOLOv8m  | 960 * 544   | 62.1  | 40.2    | 3.5                 | 25.8      | 100.4    |
+| YOLOv8l  | 960 * 544   | 63.2  | 40.9    | 4.8                 | 43.6      | 210.2    |
+| YOLOv8x  | 960 * 544   | 63.2  | 41.0    | 6.5                 | 68.1      | 328.2    |
+| YOLOBis  | 1280 * 704  | 61.2  | 39.5    | 3.5                 | 19.1      | 65.1     |
+| YOLOBim  | 1280 * 704  | 63.2  | 40.9    | 5.8                 | 58.2      | 197.3    |
+| YOLOBil  | 1280 * 704  | 63.6  | 41.5    | 7.5                 | 72.7      | 329.0    |
+| YOLOBix  | 1280 * 704  | 64.3  | 42.0    | 11.1                | 113.5     | 513.7    |
 
 We provide detection results for YOLOv8s and YOLOBix in each category to evaluate the upper and lower limits of the model detection ability.
 
