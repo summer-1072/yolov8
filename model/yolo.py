@@ -130,7 +130,7 @@ class YOLOBI(nn.Module):
         y12 = self.sppf(y11)
 
         # Neck
-        # FPN UP
+        # FPN DOWN
         y13 = torch.cat([self.upsample1(y12), y9], 1)
         y14 = self.c2f_6(y13)
 
@@ -140,7 +140,7 @@ class YOLOBI(nn.Module):
         y17 = torch.cat([self.upsample3(y16), y5], 1)
         y18 = self.c2f_8(y17)
 
-        # FPN DOWN
+        # FPN UP
         y19 = torch.cat([self.p7(y18), y16, self.downsample1(y5)], 1)
         y20 = self.c2f_9(y19)
 
