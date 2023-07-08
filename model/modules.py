@@ -20,7 +20,7 @@ class Conv(nn.Module):
 
 
 class BottleNeck(nn.Module):
-    def __init__(self, ch_in, ch_out, kernels=(3, 3), exp=0.5, shortcut=True):
+    def __init__(self, ch_in, ch_out, kernels, exp, shortcut):
         super().__init__()
 
         ch_ = int(ch_out * exp)
@@ -30,6 +30,20 @@ class BottleNeck(nn.Module):
 
     def forward(self, x):
         return x + self.conv2(self.conv1(x)) if self.shortcut else self.conv2(self.conv1(x))
+
+
+class C3(nn.Module):
+    def __init__(self, ch_in, ch_out, num, shortcut, exp=0.5):
+        super().__init__()
+
+        ch_ = int(ch_out * exp)
+        self.conv1 = Conv(ch_in, ch_, 1, 1)
+        self.conv2 = Conv(ch_in, ch_, 1, 1)
+        self.conv3 = Conv(2 * ch_, ch_out, 1, 1)
+        self.m = nn.Sequential(*(BottleNeck(ch_, ch_, (1, 3), 1, shortcut) for _ in range(num)))
+
+    def forward(self, x):
+        return self.conv3(torch.cat((self.m(self.conv1(x)), self.conv2(x)), 1))
 
 
 class C2F(nn.Module):
@@ -46,20 +60,6 @@ class C2F(nn.Module):
         x.extend(m(x[-1]) for m in self.m)
 
         return self.conv2(torch.cat(x, 1))
-
-
-class C3(nn.Module):
-    def __init__(self, ch_in, ch_out, num, shortcut, exp=0.5):
-        super().__init__()
-
-        ch_ = int(ch_out * exp)
-        self.conv1 = Conv(ch_in, ch_, 1, 1)
-        self.conv2 = Conv(ch_in, ch_, 1, 1)
-        self.conv3 = Conv(2 * ch_, ch_out, 1, 1)
-        self.m = nn.Sequential(*(BottleNeck(ch_, ch_, (1, 3), 1, shortcut) for _ in range(num)))
-
-    def forward(self, x):
-        return self.conv3(torch.cat((self.m(self.conv1(x)), self.conv2(x)), 1))
 
 
 class C3F(nn.Module):
