@@ -50,13 +50,13 @@ class YOLO(nn.Module):
         y10 = self.sppf(y9)
 
         # Neck
-        # FPN UP
+        # FPN DOWN
         y11 = torch.cat([self.upsample1(y10), y7], 1)
         y12 = self.c2f_5(y11)
         y13 = torch.cat([self.upsample2(y12), y5], 1)
-
-        # FPN DOWN
         y14 = self.c2f_6(y13)
+
+        # FPN UP
         y15 = torch.cat([self.p6(y14), y12], 1)
         y16 = self.c2f_7(y15)
         y17 = torch.cat([self.p7(y16), y10], 1)
