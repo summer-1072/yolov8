@@ -6,13 +6,13 @@ from yolo import *
 from copy import deepcopy
 
 
-def load_model(model_path, cls, weight_path, fused, shape):
+def load_model(model_path, cls, weight_path, fused, shape, device):
     config = yaml.safe_load(open(model_path, encoding="utf-8"))
 
     model = eval(config['model'])(config['network'], config['reg_max'], config['chs'], config['strides'], cls)
 
     if weight_path:
-        weight = torch.load(weight_path)
+        weight = torch.load(weight_path, map_location=torch.device(device))
 
         if fused:
             # fuse conv and bn

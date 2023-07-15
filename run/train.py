@@ -152,7 +152,7 @@ def train(args, device):
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'], device)
     model.to(device)
 
     # ema

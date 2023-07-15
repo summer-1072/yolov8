@@ -71,7 +71,7 @@ def predict(args, device):
     half = hyp['half'] & (device != 'cpu')
 
     # load model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'], device)
     model = model.half() if half else model.float()
     model.to(device)
 
@@ -142,7 +142,7 @@ def predict(args, device):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_dir', default='')
+parser.add_argument('--img_dir', default='../dataset/bdd100k/images/test')
 parser.add_argument('--video_dir', default='../dataset/bdd100k/videos')
 parser.add_argument('--cls_path', default='../dataset/bdd100k/cls.yaml')
 parser.add_argument('--model_path', type=str, default='../config/model/yolov8s.yaml')

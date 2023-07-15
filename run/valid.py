@@ -88,7 +88,7 @@ if __name__ == "__main__":
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'])
+    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'], device)
     model.to(device)
 
     val_dataset = LoadDataset(args.val_img_dir, args.val_label_path, hyp, model.anchor.strides[-1], False)
