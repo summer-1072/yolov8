@@ -59,7 +59,8 @@ def fuse_conv_bn(m):
 
 if __name__ == "__main__":
     weight_path = '../log/train/train1/weight/best.pth'
-    weight = torch.load(weight_path)
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    weight = torch.load(weight_path, map_location=torch.device(device))
 
     for m in weight.modules():
         if isinstance(m, Conv) and hasattr(m, 'bn'):
