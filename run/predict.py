@@ -79,6 +79,7 @@ def predict(args, device):
     if not os.path.exists(args.log_dir) or len(os.listdir(args.log_dir)) == 0:
         log_dir = os.path.join(args.log_dir, 'detect1')
     else:
+        os.remove(os.path.join(args.log_dir, '.DS_Store'))
         ord = max([int(x.replace('detect', '')) for x in os.listdir(args.log_dir)]) + 1
         log_dir = os.path.join(args.log_dir, 'detect' + str(ord))
     os.makedirs(log_dir)
