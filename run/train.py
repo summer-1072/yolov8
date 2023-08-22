@@ -196,7 +196,9 @@ def train(args, device):
     # build log_dir
     else:
         os.makedirs('../log/train', exist_ok=True)
-        os.remove('../log/train/.DS_Store')
+        ds_file = os.path.join('../log/train/.DS_Store')
+        if os.path.exists(ds_file):
+            os.remove(ds_file)
         ord = max([int(x[5:]) for x in os.listdir('../log/train')]) + 1 if len(os.listdir('../log/train')) else 1
         args.log_dir = os.path.join('../log/train/train' + str(ord))
         os.makedirs(args.log_dir, exist_ok=True)
