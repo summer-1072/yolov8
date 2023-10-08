@@ -152,7 +152,7 @@ def train(args, device):
     hyp = yaml.safe_load(open(args.hyp_path, encoding="utf-8"))
 
     # model
-    model = load_model(args.model_path, cls, args.weight_path, args.fused, hyp['shape'], device)
+    model = load_model(args.model_path, cls, args.weight_path, False, hyp['shape'], device)
     model.to(device)
 
     # ema
@@ -314,7 +314,6 @@ if __name__ == "__main__":
     parser.add_argument('--hyp_path', default='../config/hyp/hyp.yaml')
     parser.add_argument('--model_path', default='../config/model/yolov8s.yaml')
     parser.add_argument('--weight_path', default='')
-    parser.add_argument('--fused', default=False)
     parser.add_argument('--log_dir', default='')
 
     args = parser.parse_args()
